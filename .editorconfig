@@ -53,6 +53,14 @@ csharp_space_after_keywords_in_control_flow_statements = true
 csharp_preserve_single_line_statements = false
 csharp_preserve_single_line_blocks = true
 
+# Naming: constants PascalCase (declared first so it wins over the private-field rule)
+dotnet_naming_rule.constants_pascal.symbols = constants
+dotnet_naming_rule.constants_pascal.style = pascal_case_style
+dotnet_naming_rule.constants_pascal.severity = warning
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
 # Naming: private fields _camelCase
 dotnet_naming_rule.private_fields_underscore.symbols = private_fields
 dotnet_naming_rule.private_fields_underscore.style = underscore_camel
