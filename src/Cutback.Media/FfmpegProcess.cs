@@ -45,6 +45,30 @@ internal static class FfmpegProcess
             ?? throw new InvalidOperationException($"Failed to start {executable}.");
     }
 
+    /// <summary>Starts a tool (ffprobe) with no ffmpeg preamble, both streams redirected.</summary>
+    public static Process StartRaw(string executable, IEnumerable<string> arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+
+        foreach (var arg in arguments)
+        {
+            startInfo.ArgumentList.Add(arg);
+        }
+
+        return Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Failed to start {executable}.");
+    }
+
     /// <summary>
     /// Waits for exit, honouring cancellation by killing the process tree. Throws
     /// <see cref="FfmpegException"/> on a non-zero exit unless cancellation was requested.
