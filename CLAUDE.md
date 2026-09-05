@@ -43,18 +43,20 @@ Violating any of these is a bug, not a style preference.
 
 ## Stack
 
-Target framework: **.NET 8** (LTS). Nullable enabled, implicit usings enabled, `TreatWarningsAsErrors`.
+Target framework: **.NET 10** (LTS). Nullable enabled, implicit usings enabled, `TreatWarningsAsErrors`,
+analyzers at `AnalysisLevel=latest` with code style enforced in build. All package versions live in
+`Directory.Packages.props` (central package management) so the dependency set is auditable in one place.
 
 | Concern | Package | Notes |
 |---|---|---|
-| UI | `Avalonia`, `Avalonia.Desktop`, `Avalonia.Themes.Fluent` | Only mature .NET UI that covers Linux. MAUI does not. |
+| UI | `Avalonia`, `Avalonia.Desktop`, `Avalonia.Themes.Fluent` | Only mature .NET UI that covers Linux. MAUI does not. **Pinned to 11.3.x**: `LibVLCSharp.Avalonia` is built against 11.3 and Avalonia 12 is a breaking major. Do not bump without checking LibVLCSharp. |
 | MVVM | `CommunityToolkit.Mvvm` | Use the source generators (`[ObservableProperty]`, `[RelayCommand]`). |
 | Video playback | `LibVLCSharp`, `LibVLCSharp.Avalonia` | See LibVLCSharp gotchas below. |
 | VLC native | `VideoLAN.LibVLC.Windows`, `VideoLAN.LibVLC.Mac` | **No NuGet package for Linux** — requires system `libvlc`. |
 | FFmpeg | `FFMpegCore` | Wraps the ffmpeg CLI. Do not switch to `FFmpeg.AutoGen`; the raw P/Invoke bindings are not worth the pain here. |
-| Waveform drawing | `SkiaSharp` (via Avalonia's custom `Control.Render`) | |
+| Waveform drawing | SkiaSharp **transitively via `Avalonia.Skia`** (2.88.x) | **Do not add a direct `SkiaSharp` PackageReference.** Custom drawing obtains an `SKCanvas` through `ISkiaSharpApiLeaseFeature` and must use the same SkiaSharp assembly Avalonia does. A direct reference to current SkiaSharp (4.x) unifies to an incompatible version and breaks Avalonia's renderer. |
 | JSON | `System.Text.Json` | Source-generated context, no reflection. |
-| Tests | `xunit`, `FluentAssertions` | |
+| Tests | `xunit`, `FluentAssertions` | FluentAssertions **pinned to 7.x** (Apache-2.0). 8.x moved to a commercial licence. |
 
 Deferred to a later phase, do not add yet: `Whisper.net`, `Whisper.net.Runtime`, `Vosk`,
 `Microsoft.ML.OnnxRuntime`.
