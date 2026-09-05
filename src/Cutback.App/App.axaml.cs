@@ -37,7 +37,7 @@ public partial class App : Application
             }
 
             var window = new MainWindow();
-            var viewModel = new MainWindowViewModel(_player, new AvaloniaFileDialogService(window), settings)
+            var viewModel = new MainWindowViewModel(_player, new AvaloniaFileDialogService(window), new AvaloniaDialogService(window), settings)
             {
                 ErrorMessage = startupError,
             };
@@ -47,7 +47,7 @@ public partial class App : Application
             desktop.MainWindow = window;
             desktop.Exit += (_, _) => _player.Dispose();
 
-            // "Open with" / command line: cutback <file>
+            // "Open with" / command line: cutback <video or .cutback file>
             var startupFile = desktop.Args?.FirstOrDefault(File.Exists);
             if (startupFile is not null)
             {

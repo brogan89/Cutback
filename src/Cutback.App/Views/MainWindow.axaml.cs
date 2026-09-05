@@ -10,14 +10,33 @@ namespace Cutback.App.Views;
 
 public partial class MainWindow : Window
 {
+    private bool _closeConfirmed;
+
     public MainWindow()
     {
         InitializeComponent();
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
+        Closing += OnClosing;
     }
 
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
+
+    /// <summary>Unsaved changes get a Save / Don't Save / Cancel prompt before the window closes.</summary>
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_closeConfirmed || ViewModel is not { IsDirty: true } vm)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        if (await vm.ConfirmDiscardChangesAsync())
+        {
+            _closeConfirmed = true;
+            Close();
+        }
+    }
 
     /// <summary>
     /// Wires the native video surface. VideoView only hands VLC the native handle when its
@@ -34,10 +53,11 @@ public partial class MainWindow : Window
         Opened += (_, _) => Dispatcher.UIThread.Post(() => VideoView.MediaPlayer = vlc.MediaPlayer, DispatcherPriority.Loaded);
     }
 
-    private static bool IsVideoFile(string path)
+    private static bool IsOpenable(string path)
     {
         var ext = Path.GetExtension(path).TrimStart('.');
-        return AvaloniaFileDialogService.VideoExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase);
+        return AvaloniaFileDialogService.VideoExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase)
+            || string.Equals(ext, "cutback", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? DroppedVideoPath(DragEventArgs e)
@@ -48,7 +68,7 @@ public partial class MainWindow : Window
             return null;
         }
 
-        return files.Select(f => f.TryGetLocalPath()).FirstOrDefault(p => p is not null && IsVideoFile(p));
+        return files.Select(f => f.TryGetLocalPath()).FirstOrDefault(p => p is not null && IsOpenable(p));
     }
 
     private void OnDragOver(object? sender, DragEventArgs e)
@@ -61,7 +81,7 @@ public partial class MainWindow : Window
     {
         e.Handled = true;
         var path = DroppedVideoPath(e);
-        if (path is not null && ViewModel is { } vm)
+        if (path is not null && ViewModel is { } vm && await vm.ConfirmDiscardChangesAsync())
         {
             await vm.OpenVideoAsync(path);
         }
