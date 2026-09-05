@@ -15,6 +15,14 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.Diagnostics" Condition="'$(Configuration)' == 'Debug'" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="LibVLCSharp" />
+    <PackageReference Include="LibVLCSharp.Avalonia" />
+    <!--
+      Native libVLC. Windows gets it from NuGet. There is no Linux package (system libvlc is used)
+      and the macOS package only ships an x86_64 libvlc.dylib with no libvlccore or plugins, so
+      on macOS the installed VLC.app is used instead. See Playback/LibVlcLocator.cs.
+    -->
+    <PackageReference Include="VideoLAN.LibVLC.Windows" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
   </ItemGroup>
 
   <ItemGroup>

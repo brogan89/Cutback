@@ -1,18 +1,91 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Cutback.App.ViewModels"
+        xmlns:vlc="clr-namespace:LibVLCSharp.Avalonia;assembly=LibVLCSharp.Avalonia"
         x:Class="Cutback.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding Title}"
         Width="1280" Height="800"
         MinWidth="800" MinHeight="500"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        DragDrop.AllowDrop="True"
+        Background="#1B1B1F">
 
-  <Design.DataContext>
-    <vm:MainWindowViewModel />
-  </Design.DataContext>
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Space" Command="{Binding PlayPauseCommand}" />
+    <KeyBinding Gesture="Cmd+O" Command="{Binding OpenVideoCommand}" />
+    <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenVideoCommand}" />
+  </Window.KeyBindings>
 
-  <!-- Intentionally empty in step 1. Layout arrives in step 4. -->
-  <Panel />
+  <Window.Styles>
+    <Style Selector="Button.toolbar">
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="MinHeight" Value="32" />
+    </Style>
+    <Style Selector="TextBlock.dim">
+      <Setter Property="Foreground" Value="#9A9AA6" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+
+    <!-- Toolbar -->
+    <Border Grid.Row="0" Background="#242429" Padding="10,8">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Classes="toolbar" Command="{Binding OpenVideoCommand}" Content="Open video…" />
+        <TextBlock Classes="dim" VerticalAlignment="Center" Margin="12,0,0,0" Text="{Binding SourceFileName}" />
+      </StackPanel>
+    </Border>
+
+    <!-- Error banner -->
+    <Border Grid.Row="1" Background="#5A1E24" Padding="12,8" IsVisible="{Binding HasError}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0" Text="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="#FFE3E6" VerticalAlignment="Center" />
+        <Button Grid.Column="1" Content="Dismiss" Command="{Binding DismissErrorCommand}" Margin="12,0,0,0" VerticalAlignment="Top" />
+      </Grid>
+    </Border>
+
+    <!-- Video. Overlay content MUST be inside the VideoView (airspace), never a sibling. -->
+    <Border Grid.Row="2" Background="Black" ClipToBounds="True">
+      <vlc:VideoView x:Name="VideoView">
+        <Panel DragDrop.AllowDrop="True" Background="Transparent">
+          <StackPanel IsVisible="{Binding !HasProject}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+            <TextBlock Text="Drop a video here" FontSize="22" Foreground="#C8C8D0" HorizontalAlignment="Center" />
+            <TextBlock Text="or use Open video… to get started" Classes="dim" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Panel>
+      </vlc:VideoView>
+    </Border>
+
+    <!-- Transport -->
+    <Border Grid.Row="3" Background="#242429" Padding="10,6">
+      <Grid ColumnDefinitions="Auto,Auto,*">
+        <Button Grid.Column="0" Classes="toolbar" MinWidth="80" Command="{Binding PlayPauseCommand}"
+                Content="{Binding IsPlaying, Converter={x:Static vm:Converters.PlayPauseLabel}}" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0" Spacing="4">
+          <TextBlock Text="{Binding PositionText}" FontFamily="Menlo,Consolas,monospace" />
+          <TextBlock Text="/" Classes="dim" />
+          <TextBlock Text="{Binding DurationText}" Classes="dim" FontFamily="Menlo,Consolas,monospace" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Timeline (step 5) -->
+    <Border Grid.Row="4" Height="180" Background="#151518" BorderBrush="#2E2E35" BorderThickness="0,1,0,0">
+      <TextBlock Text="Timeline" Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Border>
+
+    <!-- Status / progress -->
+    <Border Grid.Row="5" Background="#242429" Padding="10,4" MinHeight="28">
+      <Grid ColumnDefinitions="Auto,*">
+        <TextBlock Grid.Column="0" Classes="dim" VerticalAlignment="Center" Text="{Binding BusyMessage}" IsVisible="{Binding IsBusy}" />
+        <ProgressBar Grid.Column="1" Margin="12,0,0,0" Height="6" VerticalAlignment="Center"
+                     IsVisible="{Binding IsBusy}"
+                     IsIndeterminate="{Binding IsBusyIndeterminate}"
+                     Minimum="0" Maximum="1" Value="{Binding BusyProgress}" />
+      </Grid>
+    </Border>
+
+  </Grid>
 
 </Window>

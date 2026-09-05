@@ -17,7 +17,7 @@ modified.
 |---|---|
 | [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) | Build and run |
 | [FFmpeg](https://ffmpeg.org/) (`ffmpeg` and `ffprobe` on `PATH`) | Waveform, silence detection, export |
-| libVLC | Video preview. Bundled on Windows and macOS via NuGet; system package on Linux |
+| libVLC | Video preview. Bundled on Windows via NuGet; [VLC.app](https://www.videolan.org/) on macOS; system package on Linux |
 
 ### Installing FFmpeg
 
@@ -34,7 +34,11 @@ winget install Gyan.FFmpeg
 
 ```bash
 brew install ffmpeg
+brew install --cask vlc
 ```
+
+The NuGet libVLC package for macOS is Intel-only and incomplete, so Cutback loads libVLC from
+`/Applications/VLC.app` instead. Any VLC 3.x works.
 
 **Linux (Debian / Ubuntu)**
 

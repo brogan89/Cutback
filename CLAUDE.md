@@ -52,7 +52,7 @@ analyzers at `AnalysisLevel=latest` with code style enforced in build. All packa
 | UI | `Avalonia`, `Avalonia.Desktop`, `Avalonia.Themes.Fluent` | Only mature .NET UI that covers Linux. MAUI does not. **Pinned to 11.3.x**: `LibVLCSharp.Avalonia` is built against 11.3 and Avalonia 12 is a breaking major. Do not bump without checking LibVLCSharp. |
 | MVVM | `CommunityToolkit.Mvvm` | Use the source generators (`[ObservableProperty]`, `[RelayCommand]`). |
 | Video playback | `LibVLCSharp`, `LibVLCSharp.Avalonia` | See LibVLCSharp gotchas below. |
-| VLC native | `VideoLAN.LibVLC.Windows`, `VideoLAN.LibVLC.Mac` | **No NuGet package for Linux** — requires system `libvlc`. |
+| VLC native | `VideoLAN.LibVLC.Windows` only | **No NuGet package for Linux** — requires system `libvlc`. **`VideoLAN.LibVLC.Mac` is unusable**: x86_64-only and ships no libvlccore or plugins. On macOS `LibVlcLocator` loads `/Applications/VLC.app` and must `setenv("VLC_PLUGIN_PATH")` via P/Invoke, because .NET's `Environment.SetEnvironmentVariable` does not reach native `getenv` on Unix. |
 | FFmpeg | `FFMpegCore` | Wraps the ffmpeg CLI. Do not switch to `FFmpeg.AutoGen`; the raw P/Invoke bindings are not worth the pain here. |
 | Waveform drawing | SkiaSharp **transitively via `Avalonia.Skia`** (2.88.x) | **Do not add a direct `SkiaSharp` PackageReference.** Custom drawing obtains an `SKCanvas` through `ISkiaSharpApiLeaseFeature` and must use the same SkiaSharp assembly Avalonia does. A direct reference to current SkiaSharp (4.x) unifies to an incompatible version and breaks Avalonia's renderer. |
 | JSON | `System.Text.Json` | Source-generated context, no reflection. |
@@ -224,7 +224,14 @@ These will cost you hours if you don't know them:
    ```
 
    The `VideoView`'s `DataContext` propagates to its content, so binding still works normally.
-3. **Preview of the edited result is not gapless.** VLC has no EDL playlist concept, so skipping a cut
+3. **`VideoView.MediaPlayer` must be assigned after the native control exists.** The control only
+   hands VLC the window handle inside the `MediaPlayer` setter, and the handle is created on first
+   layout. Assigning in the window constructor silently produces "No drawable-nsobject found" and a
+   black video. Assign in `Window.Opened` via `Dispatcher.UIThread.Post(..., DispatcherPriority.Loaded)`.
+4. **libVLC 3 ignores `Play()` and seeks in the `Ended` state.** `VlcVideoPlayer` calls `Stop()` when
+   `EndReached` fires (from a posted UI-thread callback, never from VLC's own thread, which deadlocks)
+   so that the next Play or Seek restarts the media.
+5. **Preview of the edited result is not gapless.** VLC has no EDL playlist concept, so skipping a cut
    means a seek, and a seek visibly hitches. For the MVP this is acceptable: on the position-changed
    event, if the playhead has entered a disabled segment, seek to that segment's end.
 
