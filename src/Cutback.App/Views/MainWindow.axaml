@@ -34,6 +34,8 @@
     <Border Grid.Row="0" Background="#242429" Padding="10,8">
       <StackPanel Orientation="Horizontal" Spacing="8">
         <Button Classes="toolbar" Command="{Binding OpenVideoCommand}" Content="Open video…" />
+        <Button Classes="toolbar" Command="{Binding DetectSilenceCommand}" Content="Detect silence" />
+        <ToggleButton Classes="toolbar" IsChecked="{Binding IsSettingsOpen}" Content="Detection settings" />
         <TextBlock Classes="dim" VerticalAlignment="Center" Margin="12,0,0,0" Text="{Binding SourceFileName}" />
       </StackPanel>
     </Border>
@@ -46,17 +48,61 @@
       </Grid>
     </Border>
 
-    <!-- Video. Overlay content MUST be inside the VideoView (airspace), never a sibling. -->
-    <Border Grid.Row="2" Background="Black" ClipToBounds="True">
-      <vlc:VideoView x:Name="VideoView">
-        <Panel DragDrop.AllowDrop="True" Background="Transparent">
-          <StackPanel IsVisible="{Binding !HasProject}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-            <TextBlock Text="Drop a video here" FontSize="22" Foreground="#C8C8D0" HorizontalAlignment="Center" />
-            <TextBlock Text="or use Open video… to get started" Classes="dim" HorizontalAlignment="Center" />
+    <!-- Video + optional settings panel side by side (the panel never overlaps the video). -->
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+
+      <!-- Overlay content MUST be inside the VideoView (airspace), never a sibling. -->
+      <Border Grid.Column="0" Background="Black" ClipToBounds="True">
+        <vlc:VideoView x:Name="VideoView">
+          <Panel DragDrop.AllowDrop="True" Background="Transparent">
+            <StackPanel IsVisible="{Binding !HasProject}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+              <TextBlock Text="Drop a video here" FontSize="22" Foreground="#C8C8D0" HorizontalAlignment="Center" />
+              <TextBlock Text="or use Open video… to get started" Classes="dim" HorizontalAlignment="Center" />
+            </StackPanel>
+          </Panel>
+        </vlc:VideoView>
+      </Border>
+
+      <!-- Detection settings -->
+      <Border Grid.Column="1" Width="280" Background="#202024" BorderBrush="#2E2E35" BorderThickness="1,0,0,0"
+              Padding="16" IsVisible="{Binding IsSettingsOpen}">
+        <StackPanel Spacing="14">
+          <TextBlock Text="Detection settings" FontWeight="SemiBold" FontSize="15" />
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Silence threshold (dB)" />
+            <NumericUpDown Value="{Binding SilenceThresholdDb}" Minimum="-80" Maximum="0" Increment="1" FormatString="0.0" />
+            <TextBlock Classes="dim" TextWrapping="Wrap" FontSize="12" Text="Audio quieter than this counts as silence. Raise it (towards 0) if breaths and room noise are not being cut." />
           </StackPanel>
-        </Panel>
-      </vlc:VideoView>
-    </Border>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Minimum silence (ms)" />
+            <NumericUpDown Value="{Binding MinSilenceMs}" Minimum="50" Maximum="5000" Increment="50" FormatString="0" />
+            <TextBlock Classes="dim" TextWrapping="Wrap" FontSize="12" Text="Pauses shorter than this are left alone." />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Padding (ms)" />
+            <NumericUpDown Value="{Binding PaddingMs}" Minimum="0" Maximum="500" Increment="10" FormatString="0" />
+            <TextBlock Classes="dim" TextWrapping="Wrap" FontSize="12" Text="Extra audio kept on each side of a cut so words are not clipped." />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Minimum keep (ms)" />
+            <NumericUpDown Value="{Binding MinKeepMs}" Minimum="0" Maximum="2000" Increment="20" FormatString="0" />
+            <TextBlock Classes="dim" TextWrapping="Wrap" FontSize="12" Text="Kept fragments shorter than this are removed with their neighbours to avoid a stuttering result." />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Detect silence" Command="{Binding DetectSilenceCommand}" />
+            <Button Content="Reset" Command="{Binding ResetSettingsCommand}" />
+          </StackPanel>
+
+          <TextBlock Classes="dim" TextWrapping="Wrap" FontSize="12"
+                     Text="Re-running detection replaces automatic cuts but never touches segments you have edited by hand." />
+        </StackPanel>
+      </Border>
+    </Grid>
 
     <!-- Transport -->
     <Border Grid.Row="3" Background="#242429" Padding="10,6">
@@ -86,6 +132,7 @@
     <Border Grid.Row="5" Background="#242429" Padding="10,4" MinHeight="28">
       <Grid ColumnDefinitions="Auto,*">
         <TextBlock Grid.Column="0" Classes="dim" VerticalAlignment="Center" Text="{Binding BusyMessage}" IsVisible="{Binding IsBusy}" />
+        <TextBlock Grid.Column="0" Classes="dim" VerticalAlignment="Center" Text="{Binding StatusMessage}" IsVisible="{Binding !IsBusy}" />
         <ProgressBar Grid.Column="1" Margin="12,0,0,0" Height="6" VerticalAlignment="Center"
                      IsVisible="{Binding IsBusy}"
                      IsIndeterminate="{Binding IsBusyIndeterminate}"

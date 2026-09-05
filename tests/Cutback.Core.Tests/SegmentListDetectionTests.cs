@@ -144,6 +144,24 @@ public sealed class SegmentListDetectionTests
     }
 
     [Fact]
+    public void Splitting_then_disabling_the_tail_leaves_the_head_open_to_detection()
+    {
+        // The scenario that motivated the origin rules: the user chops off the end by hand, then
+        // asks for silence detection over the rest.
+        var list = new SegmentList(Duration);
+        list.Split(7.0);
+        list.Toggle(1);
+
+        list.ReplaceAutoSegments([Cut(3.0, 4.0)]);
+
+        list.Segments.Select(s => (s.Start, s.End, s.Enabled, s.Origin)).Should().Equal(
+            (0.0, 3.0, true, SegmentOrigin.Auto),
+            (3.0, 4.0, false, SegmentOrigin.Auto),
+            (4.0, 7.0, true, SegmentOrigin.Auto),
+            (7.0, 10.0, false, SegmentOrigin.Manual));
+    }
+
+    [Fact]
     public void Existing_auto_segment_ids_are_not_reused()
     {
         var list = new SegmentList(Duration);

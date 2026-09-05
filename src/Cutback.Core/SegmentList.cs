@@ -106,8 +106,9 @@ public sealed class SegmentList
 
     /// <summary>
     /// Splits the segment containing <paramref name="time"/> into two at that time. Both halves keep
-    /// the original enabled state and reason and are marked <see cref="SegmentOrigin.Manual"/>. The
-    /// left half keeps the original id.
+    /// the original enabled state, origin and reason; the left half keeps the original id. A split
+    /// is not a decision about either half, so it does not mark them manual. The toggle that
+    /// usually follows does.
     /// </summary>
     /// <returns>False if <paramref name="time"/> is already a boundary, in which case nothing changes.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="time"/> is outside <c>[0, Duration]</c>.</exception>
@@ -125,8 +126,8 @@ public sealed class SegmentList
             return false;
         }
 
-        var left = target with { End = time, Origin = SegmentOrigin.Manual };
-        var right = target with { Id = Segment.NewId(), Start = time, Origin = SegmentOrigin.Manual };
+        var left = target with { End = time };
+        var right = target with { Id = Segment.NewId(), Start = time };
         _segments[index] = left;
         _segments.Insert(index + 1, right);
 
@@ -137,8 +138,10 @@ public sealed class SegmentList
     /// <summary>
     /// Moves the boundary between <c>Segments[boundaryIndex - 1]</c> and <c>Segments[boundaryIndex]</c>
     /// to <paramref name="time"/>, clamped so that both neighbours keep at least
-    /// <see cref="MinSegmentLength"/>. A boundary can never cross another boundary. Both neighbours
-    /// are marked <see cref="SegmentOrigin.Manual"/>.
+    /// <see cref="MinSegmentLength"/>. A boundary can never cross another boundary. Disabled
+    /// neighbours are marked <see cref="SegmentOrigin.Manual"/>, because shaping a cut by hand is a
+    /// decision about that cut; kept neighbours keep their origin so re-detection can still find
+    /// new silences inside them.
     /// </summary>
     /// <param name="boundaryIndex">In <c>[1, Count - 1]</c>. Boundary 0 and boundary <c>Count</c> are the fixed ends of the timeline.</param>
     /// <param name="time">Requested boundary time in seconds.</param>
@@ -172,8 +175,8 @@ public sealed class SegmentList
             return applied;
         }
 
-        _segments[boundaryIndex - 1] = prev with { End = applied, Origin = SegmentOrigin.Manual };
-        _segments[boundaryIndex] = next with { Start = applied, Origin = SegmentOrigin.Manual };
+        _segments[boundaryIndex - 1] = prev with { End = applied, Origin = prev.Enabled ? prev.Origin : SegmentOrigin.Manual };
+        _segments[boundaryIndex] = next with { Start = applied, Origin = next.Enabled ? next.Origin : SegmentOrigin.Manual };
 
         OnChanged();
         return applied;

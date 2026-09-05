@@ -187,16 +187,18 @@ public sealed class SegmentListTests
     }
 
     [Fact]
-    public void Split_halves_inherit_enabled_state_and_become_manual()
+    public void Split_halves_inherit_enabled_state_and_origin()
     {
-        var list = new SegmentList(Duration);
-        list.Toggle(0); // now disabled
+        // Splitting is not a decision about either half, so it must not lock them against
+        // re-detection. Only a toggle or a boundary drag on a cut does that.
+        var list = new SegmentList(Duration, [Segment.Create(0.0, Duration, enabled: false, SegmentOrigin.Auto, "silence 10.00s")]);
         var original = list.Segments[0];
 
         list.Split(4.0);
 
         list.Segments.Should().OnlyContain(s => !s.Enabled);
-        list.Segments.Should().OnlyContain(s => s.Origin == SegmentOrigin.Manual);
+        list.Segments.Should().OnlyContain(s => s.Origin == SegmentOrigin.Auto);
+        list.Segments.Should().OnlyContain(s => s.Reason == "silence 10.00s");
         list.Segments[0].Id.Should().Be(original.Id, "the left half keeps the original identity");
         list.Segments[1].Id.Should().NotBe(original.Id);
     }
@@ -260,15 +262,44 @@ public sealed class SegmentListTests
     }
 
     [Fact]
-    public void MoveBoundary_marks_both_neighbours_manual()
+    public void MoveBoundary_marks_the_cut_neighbour_manual_but_not_the_kept_one()
     {
+        // Dragging the edge of a cut is a decision about that cut. Locking the kept neighbour too
+        // would stop re-detection from finding new silences inside it.
         var list = ThreeSegments();
+
+        list.MoveBoundary(1, 3.5);
+
+        list.Segments[0].Origin.Should().Be(SegmentOrigin.Auto, "the kept side stays open to re-detection");
+        list.Segments[1].Origin.Should().Be(SegmentOrigin.Manual, "the cut was shaped by hand");
+        list.Segments[2].Origin.Should().Be(SegmentOrigin.Auto, "an unrelated segment is not touched");
+    }
+
+    [Fact]
+    public void MoveBoundary_between_two_cuts_marks_both_manual()
+    {
+        var list = new SegmentList(Duration,
+        [
+            Segment.Create(0.0, 3.0, enabled: false, SegmentOrigin.Auto),
+            Segment.Create(3.0, 6.0, enabled: false, SegmentOrigin.Auto),
+            Segment.Create(6.0, 10.0, enabled: true, SegmentOrigin.Auto),
+        ]);
 
         list.MoveBoundary(1, 3.5);
 
         list.Segments[0].Origin.Should().Be(SegmentOrigin.Manual);
         list.Segments[1].Origin.Should().Be(SegmentOrigin.Manual);
-        list.Segments[2].Origin.Should().Be(SegmentOrigin.Auto, "an unrelated segment is not touched");
+    }
+
+    [Fact]
+    public void MoveBoundary_between_two_kept_segments_changes_no_origin()
+    {
+        var list = new SegmentList(Duration);
+        list.Split(4.0);
+
+        list.MoveBoundary(1, 4.5);
+
+        list.Segments.Should().OnlyContain(s => s.Origin == SegmentOrigin.Auto);
     }
 
     [Fact]

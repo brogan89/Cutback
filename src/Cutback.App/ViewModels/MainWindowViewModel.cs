@@ -4,6 +4,7 @@ using Cutback.App.Controls;
 using Cutback.App.Playback;
 using Cutback.App.Services;
 using Cutback.Core;
+using Cutback.Core.Detection;
 using Cutback.Core.Models;
 using Cutback.Core.Projects;
 using Cutback.Media;
@@ -35,7 +36,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProject), nameof(Title), nameof(SourceFileName))]
-    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand))]
     public partial CutbackProject? Project { get; private set; }
 
     /// <summary>The live, editable partition. Null until a project is open.</summary>
@@ -68,10 +69,48 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     public string DurationText => TimeFormat.Clock(DurationSeconds);
 
+    // ---- detection settings -------------------------------------------------------------------
+
+    [ObservableProperty]
+    public partial bool IsSettingsOpen { get; set; }
+
+    [ObservableProperty]
+    public partial double SilenceThresholdDb { get; set; } = DetectionSettings.Default.SilenceThresholdDb;
+
+    [ObservableProperty]
+    public partial int MinSilenceMs { get; set; } = DetectionSettings.Default.MinSilenceMs;
+
+    [ObservableProperty]
+    public partial int PaddingMs { get; set; } = DetectionSettings.Default.PaddingMs;
+
+    [ObservableProperty]
+    public partial int MinKeepMs { get; set; } = DetectionSettings.Default.MinKeepMs;
+
+    /// <summary>The settings as currently shown in the panel.</summary>
+    public DetectionSettings CurrentSettings => new(PaddingMs, MinSilenceMs, SilenceThresholdDb, MinKeepMs);
+
+    private void LoadSettings(DetectionSettings settings)
+    {
+        SilenceThresholdDb = settings.SilenceThresholdDb;
+        MinSilenceMs = settings.MinSilenceMs;
+        PaddingMs = settings.PaddingMs;
+        MinKeepMs = settings.MinKeepMs;
+    }
+
+    [RelayCommand]
+    private void ToggleSettings() => IsSettingsOpen = !IsSettingsOpen;
+
+    [RelayCommand]
+    private void ResetSettings() => LoadSettings(DetectionSettings.Default);
+
+    /// <summary>Non-error feedback shown in the footer when nothing is running.</summary>
+    [ObservableProperty]
+    public partial string? StatusMessage { get; private set; }
+
     // ---- busy / errors ------------------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(DetectSilenceCommand))]
     public partial bool IsBusy { get; private set; }
 
     [ObservableProperty]
@@ -147,6 +186,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             Waveform = waveform;
             DurationSeconds = source.DurationSeconds;
             PositionSeconds = 0;
+            LoadSettings(project.Settings);
+            StatusMessage = null;
         }
         catch (OperationCanceledException)
         {
@@ -197,6 +238,46 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         Segments.MoveBoundary(move.BoundaryIndex, move.Time);
+    }
+
+    // ---- detection ----------------------------------------------------------------------------
+
+    private bool CanDetect => HasProject && !IsBusy;
+
+    [RelayCommand(CanExecute = nameof(CanDetect))]
+    private async Task DetectSilenceAsync()
+    {
+        if (Project is null || Segments is null)
+        {
+            return;
+        }
+
+        var settings = CurrentSettings;
+        ErrorMessage = null;
+        BeginBusy("Detecting silence…");
+        try
+        {
+            var ffmpeg = ResolveFfmpeg();
+            var progress = new Progress<double>(p => BusyProgress = p);
+            var spans = await new SilenceDetector(ffmpeg).DetectAsync(Project.Source.Path, DurationSeconds, settings, progress, CancellationToken.None);
+            var cuts = SilenceCutPlanner.Plan(spans, settings, DurationSeconds);
+
+            Segments.ReplaceAutoSegments(cuts);
+            Project = Project with { Settings = settings };
+
+            var removed = cuts.Sum(c => c.Duration);
+            StatusMessage = cuts.Count == 0
+                ? "No silence found with the current settings."
+                : $"Detected {cuts.Count} silence{(cuts.Count == 1 ? "" : "s")}, {TimeFormat.Clock(removed)} removed.";
+        }
+        catch (Exception ex) when (ex is FfmpegNotFoundException or FfmpegException or IOException)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            EndBusy();
+        }
     }
 
     // ---- playback skipping --------------------------------------------------------------------
