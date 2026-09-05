@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Cutback.Core.Detection;
 using Cutback.Core.Models;
 
 namespace Cutback.Core;
@@ -240,6 +241,100 @@ public sealed class SegmentList
         _segments.AddRange(merged);
 
         OnChanged();
+    }
+
+    /// <summary>
+    /// Applies a fresh detection result. Every <see cref="SegmentOrigin.Auto"/> segment is discarded
+    /// and the timeline outside the user's segments is re-laid from <paramref name="cuts"/>.
+    /// Segments with any other origin (manual, Claude) are preserved exactly, and cuts that overlap
+    /// them are clipped around them. Re-running detection therefore never undoes an edit.
+    /// </summary>
+    public void ReplaceAutoSegments(IEnumerable<PlannedCut> cuts)
+    {
+        ArgumentNullException.ThrowIfNull(cuts);
+
+        var locked = _segments.Where(s => s.Origin != SegmentOrigin.Auto).OrderBy(s => s.Start).ToList();
+        var sortedCuts = cuts.OrderBy(c => c.Start).ToList();
+
+        var result = new List<Segment>();
+        var cursor = 0.0;
+        foreach (var region in FreeRegions(locked))
+        {
+            // Emit the locked segment(s) between the previous free region and this one.
+            foreach (var l in locked.Where(l => l.Start >= cursor && l.End <= region.Start))
+            {
+                result.Add(l);
+            }
+
+            LayOutFreeRegion(result, region.Start, region.End, sortedCuts);
+            cursor = region.End;
+        }
+
+        foreach (var l in locked.Where(l => l.Start >= cursor))
+        {
+            result.Add(l);
+        }
+
+        _segments.Clear();
+        _segments.AddRange(result);
+        OnChanged();
+    }
+
+    /// <summary>The stretches of <c>[0, Duration]</c> not covered by locked segments, in order.</summary>
+    private IEnumerable<(double Start, double End)> FreeRegions(List<Segment> locked)
+    {
+        var cursor = 0.0;
+        foreach (var l in locked)
+        {
+            if (l.Start > cursor)
+            {
+                yield return (cursor, l.Start);
+            }
+
+            cursor = l.End;
+        }
+
+        if (cursor < Duration)
+        {
+            yield return (cursor, Duration);
+        }
+    }
+
+    /// <summary>Fills <c>[start, end)</c> with alternating kept / cut auto segments from the cuts that intersect it.</summary>
+    private static void LayOutFreeRegion(List<Segment> result, double start, double end, List<PlannedCut> cuts)
+    {
+        var cursor = start;
+        foreach (var cut in cuts)
+        {
+            var cutStart = Math.Max(cut.Start, start);
+            var cutEnd = Math.Min(cut.End, end);
+            if (cutEnd <= cutStart)
+            {
+                continue;
+            }
+
+            if (cutStart > cursor)
+            {
+                result.Add(Segment.Create(cursor, cutStart, enabled: true, SegmentOrigin.Auto));
+            }
+
+            if (result.Count > 0 && !result[^1].Enabled && result[^1].Origin == SegmentOrigin.Auto && result[^1].End == cutStart)
+            {
+                // Touching cuts become one segment.
+                result[^1] = result[^1] with { End = cutEnd };
+            }
+            else
+            {
+                result.Add(Segment.Create(cutStart, cutEnd, enabled: false, SegmentOrigin.Auto, cut.Reason));
+            }
+
+            cursor = cutEnd;
+        }
+
+        if (cursor < end)
+        {
+            result.Add(Segment.Create(cursor, end, enabled: true, SegmentOrigin.Auto));
+        }
     }
 
     /// <summary>
