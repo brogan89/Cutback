@@ -5,12 +5,14 @@ using Cutback.App.Playback;
 using Cutback.App.Services;
 using Cutback.App.ViewModels;
 using Cutback.App.Views;
+using Cutback.Media;
 
 namespace Cutback.App;
 
 public partial class App : Application
 {
     private IVideoPlayer? _player;
+    private TempSession? _temp;
 
     public override void Initialize()
     {
@@ -23,6 +25,7 @@ public partial class App : Application
         {
             var settings = new AppSettingsStore();
             settings.Load();
+            _temp = new TempSession();
 
             string? startupError = null;
             try
@@ -37,7 +40,7 @@ public partial class App : Application
             }
 
             var window = new MainWindow();
-            var viewModel = new MainWindowViewModel(_player, new AvaloniaFileDialogService(window), new AvaloniaDialogService(window), settings)
+            var viewModel = new MainWindowViewModel(_player, new AvaloniaFileDialogService(window), new AvaloniaDialogService(window), settings, _temp)
             {
                 ErrorMessage = startupError,
             };
@@ -45,7 +48,11 @@ public partial class App : Application
             window.AttachPlayer(_player);
 
             desktop.MainWindow = window;
-            desktop.Exit += (_, _) => _player.Dispose();
+            desktop.Exit += (_, _) =>
+            {
+                _player.Dispose();
+                _temp.Dispose();
+            };
 
             // "Open with" / command line: cutback <video or .cutback file>
             var startupFile = desktop.Args?.FirstOrDefault(File.Exists);

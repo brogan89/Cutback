@@ -18,20 +18,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IFileDialogService _files;
     private readonly IDialogService _dialogs;
     private readonly AppSettingsStore _settings;
+    private readonly TempSession _temp;
     private FfmpegLocation? _ffmpeg;
     private CancellationTokenSource? _openCts;
     private bool _loadingSettings;
 
-    public MainWindowViewModel(IVideoPlayer player, IFileDialogService files, IDialogService dialogs, AppSettingsStore settings)
+    public MainWindowViewModel(IVideoPlayer player, IFileDialogService files, IDialogService dialogs, AppSettingsStore settings, TempSession temp)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(dialogs);
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(temp);
         _player = player;
         _files = files;
         _dialogs = dialogs;
         _settings = settings;
+        _temp = temp;
 
         _player.PositionChanged += (_, seconds) => OnPlayerPosition(seconds);
         _player.PlaybackStateChanged += (_, _) => IsPlaying = _player.IsPlaying;
@@ -43,7 +46,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProject), nameof(Title), nameof(SourceFileName), nameof(ProjectName))]
-    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand))]
     public partial CutbackProject? Project { get; private set; }
 
     /// <summary>Where the project was last saved or loaded from. Null for an unsaved project.</summary>
@@ -175,7 +178,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ---- busy ---------------------------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand))]
     public partial bool IsBusy { get; private set; }
 
     [ObservableProperty]
@@ -577,6 +580,43 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         finally
         {
             EndBusy();
+        }
+    }
+
+    // ---- export -------------------------------------------------------------------------------
+
+    [RelayCommand(CanExecute = nameof(CanEdit))]
+    private async Task ExportAsync()
+    {
+        if (Project is null || Segments is null)
+        {
+            return;
+        }
+
+        if (!Segments.Segments.Any(s => s.Enabled))
+        {
+            ErrorMessage = "Every segment is removed; there is nothing to export.";
+            return;
+        }
+
+        FfmpegLocation ffmpeg;
+        try
+        {
+            ffmpeg = ResolveFfmpeg();
+        }
+        catch (FfmpegNotFoundException ex)
+        {
+            ErrorMessage = ex.Message;
+            return;
+        }
+
+        _player.Pause();
+        var snapshot = Project with { Segments = Segments.Segments.ToList(), Settings = CurrentSettings };
+        var export = new ExportViewModel(snapshot, snapshot.Segments, ffmpeg, _temp, _files);
+        await _dialogs.ShowExportAsync(export);
+        if (export.IsDone)
+        {
+            StatusMessage = $"Exported {export.OutputFileName}.";
         }
     }
 

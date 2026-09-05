@@ -13,6 +13,12 @@ public sealed class AvaloniaDialogService : IDialogService
         _owner = owner;
     }
 
+    public Task ShowExportAsync(ViewModels.ExportViewModel viewModel)
+    {
+        var dialog = new ExportDialog { DataContext = viewModel };
+        return dialog.ShowDialog(_owner);
+    }
+
     public async Task<SaveChoice> ConfirmSaveChangesAsync(string projectName)
     {
         var dialog = new SaveChangesDialog(projectName);

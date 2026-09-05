@@ -29,9 +29,13 @@ Violating any of these is a bug, not a style preference.
    read-only, always.
 3. **Segments partition the timeline.** See Data Model. Any operation that leaves gaps, overlaps, or
    unsorted segments is a bug. `SegmentList` enforces this and is unit-tested.
-4. **Every ffmpeg filter graph is written to a temp file and passed via `-filter_complex_script`.**
+4. **Every ffmpeg filter graph is written to a temp file and passed by file, never inline.**
    Inline `-filter_complex` will blow past the Windows command-line length limit once a video has more
-   than ~50 cuts. This is not a theoretical concern; it is the normal case.
+   than ~50 cuts. This is not a theoretical concern; it is the normal case. The option to use depends
+   on the ffmpeg version: **ffmpeg 7+ takes `-/filter_complex <file>`** (the generic "read option value
+   from file" syntax) and **ffmpeg 8 removed `-filter_complex_script`** entirely; ffmpeg ≤ 6 only
+   understands `-filter_complex_script <file>`. `FfmpegCapabilities` parses `ffmpeg -version` and
+   picks the right one. Git snapshot builds with no version number are treated as modern.
 5. **Every kept audio segment gets an 8ms `afade` in and out.** Without it, every single cut is an
    audible click. This is the difference between a toy and a usable tool.
 6. **Cuts are padded by 60ms on each side by default** (configurable). Detection boundaries are
@@ -53,7 +57,7 @@ analyzers at `AnalysisLevel=latest` with code style enforced in build. All packa
 | MVVM | `CommunityToolkit.Mvvm` | Use the source generators (`[ObservableProperty]`, `[RelayCommand]`). |
 | Video playback | `LibVLCSharp`, `LibVLCSharp.Avalonia` | See LibVLCSharp gotchas below. |
 | VLC native | `VideoLAN.LibVLC.Windows` only | **No NuGet package for Linux** — requires system `libvlc`. **`VideoLAN.LibVLC.Mac` is unusable**: x86_64-only and ships no libvlccore or plugins. On macOS `LibVlcLocator` loads `/Applications/VLC.app` and must `setenv("VLC_PLUGIN_PATH")` via P/Invoke, because .NET's `Environment.SetEnvironmentVariable` does not reach native `getenv` on Unix. |
-| FFmpeg | `FFMpegCore` | Wraps the ffmpeg CLI. Do not switch to `FFmpeg.AutoGen`; the raw P/Invoke bindings are not worth the pain here. |
+| FFmpeg | `FFMpegCore` | Used for **ffprobe analysis only** (`MediaProbe`). Everything that streams stdout or parses stderr/progress (waveform, silencedetect, export, keyframe listing) goes through the small `FfmpegProcess` wrapper over `System.Diagnostics.Process`, which is simpler and identical on every platform. Do not switch to `FFmpeg.AutoGen`; the raw P/Invoke bindings are not worth the pain here. |
 | Waveform drawing | SkiaSharp **transitively via `Avalonia.Skia`** (2.88.x) | **Do not add a direct `SkiaSharp` PackageReference.** Custom drawing obtains an `SKCanvas` through `ISkiaSharpApiLeaseFeature` and must use the same SkiaSharp assembly Avalonia does. A direct reference to current SkiaSharp (4.x) unifies to an incompatible version and breaks Avalonia's renderer. |
 | JSON | `System.Text.Json` | Source-generated context, no reflection. |
 | Tests | `xunit`, `FluentAssertions` | FluentAssertions **pinned to 7.x** (Apache-2.0). 8.x moved to a commercial licence. |
@@ -91,7 +95,8 @@ Cutback/
 │       ├── ViewModels/
 │       └── Controls/TimelineControl.cs
 └── tests/
-    └── Cutback.Core.Tests/
+    ├── Cutback.Core.Tests/
+    └── Cutback.Media.Tests/       # ffmpeg-independent logic only; never runs ffmpeg
 ```
 
 `Cutback.Core` must stay dependency-free apart from `System.Text.Json`. If you find yourself wanting to
@@ -143,7 +148,11 @@ this. Assert it at the end of every mutating operation in Debug. Unit tests cove
 
 `origin` is `auto | manual | claude` and exists so the UI can show why a cut was made and so a
 re-analysis can replace `auto` cuts without touching the user's `manual` ones. **Re-running detection
-must never discard manual edits.**
+must never discard manual edits.** What counts as a manual edit: **`Toggle` marks the segment manual;
+`MoveBoundary` marks only disabled neighbours manual; `Split` marks nothing** (it inherits origin).
+A split is not a decision about either half, and locking kept regions would stop re-detection from
+finding new silences inside them. `ReplaceAutoSegments` preserves every non-`auto` segment exactly and
+clips new cuts around them.
 
 `sha256` is used to warn the user when the source file has changed or moved. It does not block opening.
 
@@ -192,12 +201,18 @@ Build a filter graph over the enabled segments:
 [v0][a0][v1][a1]…concat=n=N:v=1:a=1[outv][outa]
 ```
 
-Write that to a temp file, invoke with `-filter_complex_script <file> -map "[outv]" -map "[outa]"`.
+Write that to a temp file, invoke with `-/filter_complex <file>` (ffmpeg 7+) or
+`-filter_complex_script <file>` (older), then `-map "[outv]" -map "[outa]"`. See non-negotiable 4.
 
 Two export modes:
 - **Precise** (default): re-encode, `libx264 -crf 20 -preset medium`, `aac -b:a 192k`. Frame-accurate.
-- **Fast**: snap cut points to the nearest keyframe and stream-copy. Much quicker, boundaries land where
-  the keyframes are. Must be clearly labelled as approximate in the UI.
+  `.webm` output uses `libvpx-vp9` / `libopus` instead, since x264 cannot go in WebM.
+- **Fast**: stream-copy. Each kept range's **start moves back to the preceding keyframe; its end stays
+  exact** (a copied range must begin on a keyframe but can stop anywhere). Ranges that come to overlap
+  are merged, so a short cut just before a long GOP can vanish. This policy replaced "snap to the
+  nearest keyframe", which dropped whole kept regions on an 8 s GOP. Output only ever contains extra
+  material, never less than the user kept. Pieces are stream-copied with `-ss/-to -c copy` and joined
+  with the concat demuxer. Not available for `.webm`. Must be clearly labelled as approximate in the UI.
 
 Report progress by parsing ffmpeg's `-progress pipe:1` output, not by guessing. Export runs off the UI
 thread and is cancellable.
@@ -254,9 +269,12 @@ These will cost you hours if you don't know them:
 
 ## Testing
 
-Unit tests cover `Cutback.Core` only — the partition invariant, project round-trip serialisation,
-version migration, and `FilterGraphBuilder` output (assert against expected filter strings; do not shell
-out to ffmpeg in tests). Do not attempt to unit-test Avalonia views.
+Unit tests cover `Cutback.Core` (the partition invariant, detection planning, project round-trip
+serialisation, version migration, source hashing) and the ffmpeg-independent parts of `Cutback.Media`
+(`FfmpegLocator` resolution order, `PeakReducer`, waveform levels and snapping, the silencedetect and
+`-progress` parsers, `FfmpegCapabilities` version parsing, `KeyframeSnapper`, and `FilterGraphBuilder`
+output asserted against expected filter strings). **Never shell out to ffmpeg in tests.** Do not attempt
+to unit-test Avalonia views.
 
 ## Commands
 

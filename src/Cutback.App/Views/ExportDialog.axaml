@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cutback.App.ViewModels"
+        x:Class="Cutback.App.Views.ExportDialog"
+        x:DataType="vm:ExportViewModel"
+        Title="Export"
+        Width="520" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#242429">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.dim">
+      <Setter Property="Foreground" Value="#9A9AA6" />
+    </Style>
+  </Window.Styles>
+
+  <StackPanel Margin="20" Spacing="16">
+
+    <TextBlock Text="{Binding Summary}" FontSize="14" />
+
+    <StackPanel Spacing="6">
+      <TextBlock Text="Save to" />
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBox Grid.Column="0" Text="{Binding OutputPath}" IsReadOnly="True" />
+        <Button Grid.Column="1" Content="Browse…" Command="{Binding BrowseCommand}" Margin="8,0,0,0" />
+      </Grid>
+      <TextBlock Classes="dim" FontSize="12" Text="The extension picks the container: .mp4, .mov, .mkv or .webm." />
+    </StackPanel>
+
+    <StackPanel Spacing="8">
+      <TextBlock Text="Mode" />
+      <RadioButton GroupName="mode" IsChecked="{Binding IsPrecise}" IsEnabled="{Binding !IsExporting}">
+        <StackPanel>
+          <TextBlock Text="Precise" />
+          <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" Text="Re-encodes the video. Every cut lands exactly where you placed it. Takes roughly as long as the kept footage." />
+        </StackPanel>
+      </RadioButton>
+      <RadioButton GroupName="mode" IsChecked="{Binding IsFast}" IsEnabled="{Binding FastModeAvailable}">
+        <StackPanel>
+          <TextBlock Text="Fast (approximate)" />
+          <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" Text="Copies the video without re-encoding, so it finishes in seconds. Each kept section starts at the nearest earlier keyframe, which can be several seconds before your cut, and short cuts may disappear. Not available for WebM." />
+        </StackPanel>
+      </RadioButton>
+    </StackPanel>
+
+    <StackPanel Spacing="6">
+      <ProgressBar Minimum="0" Maximum="1" Value="{Binding Progress}" Height="8" />
+      <TextBlock Classes="dim" Text="{Binding Stage}" />
+      <Border Background="#5A1E24" Padding="10,8" CornerRadius="4" IsVisible="{Binding HasError}">
+        <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" Foreground="#FFE3E6" />
+      </Border>
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="{Binding CancelLabel}" Command="{Binding CancelCommand}" MinWidth="90" />
+      <Button Content="Export" Command="{Binding ExportCommand}" MinWidth="90" IsDefault="True" Classes="accent" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>

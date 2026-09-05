@@ -24,6 +24,8 @@
     <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveProjectAsCommand}" />
     <KeyBinding Gesture="Cmd+N" Command="{Binding NewProjectCommand}" />
     <KeyBinding Gesture="Ctrl+N" Command="{Binding NewProjectCommand}" />
+    <KeyBinding Gesture="Cmd+E" Command="{Binding ExportCommand}" />
+    <KeyBinding Gesture="Ctrl+E" Command="{Binding ExportCommand}" />
   </Window.KeyBindings>
 
   <Window.Styles>
@@ -57,6 +59,8 @@
         <Separator />
         <MenuItem Header="_Save" Command="{Binding SaveProjectCommand}" />
         <MenuItem Header="Save _As…" Command="{Binding SaveProjectAsCommand}" />
+        <Separator />
+        <MenuItem Header="_Export…" Command="{Binding ExportCommand}" />
       </MenuItem>
     </Menu>
 
@@ -69,6 +73,9 @@
         <Button Classes="toolbar" Command="{Binding SaveProjectCommand}" Content="Save" />
         <TextBlock Classes="dim" VerticalAlignment="Center" Margin="12,0,0,0" Text="{Binding SourceFileName}" />
       </StackPanel>
+    </Border>
+    <Border Grid.Row="1" Background="Transparent" Padding="10,8" HorizontalAlignment="Right">
+      <Button Classes="toolbar accent" Command="{Binding ExportCommand}" Content="Export…" />
     </Border>
 
     <!-- Banners -->

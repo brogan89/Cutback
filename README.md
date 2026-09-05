@@ -91,6 +91,19 @@ dotnet publish src/Cutback.App -c Release -r osx-arm64 --self-contained
 
 Output lands in `src/Cutback.App/bin/Release/net10.0/<rid>/publish/`.
 
+## Using it
+
+1. **Open a video** (button, drag-and-drop, or pass the path on the command line).
+2. **Detect silence.** Tune threshold, minimum silence, padding and minimum keep in *Detection
+   settings* and run again; your own edits are never overwritten.
+3. **Adjust on the timeline.** Click a segment to keep or remove it, drag a boundary to move it
+   (it snaps to the quietest nearby point), drag in the ruler to scrub, scroll to zoom, drag to pan.
+   Space plays and pauses; playback skips removed regions.
+4. **Save** the project as a `.cutback` file (JSON; the source video is never modified).
+5. **Export.** *Precise* re-encodes with frame-accurate cuts. *Fast* stream-copies in seconds but each
+   kept section starts at the previous keyframe, so it is approximate. The extension picks the
+   container: `.mp4`, `.mov`, `.mkv`, `.webm`.
+
 ## Project layout
 
 ```
