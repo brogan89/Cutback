@@ -97,6 +97,7 @@ src/
   Cutback.App/         Avalonia desktop application.
 tests/
   Cutback.Core.Tests/  xunit tests for Core.
+  Cutback.Media.Tests/ xunit tests for the ffmpeg-independent parts of Media (path resolution, peak reduction).
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the architecture, data model, and design constraints in detail.
