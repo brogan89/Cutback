@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pure logic: models, the segment partition invariant, project persistence.
+    No UI, no ffmpeg, no native dependencies. Only System.Text.Json (in-box) is permitted.
+  -->
+
+  <PropertyGroup>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+</Project>

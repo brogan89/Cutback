@@ -1,0 +1,32 @@
+# Build output
+bin/
+obj/
+artifacts/
+*.binlog
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*.DotSettings.user
+
+# Test results
+TestResults/
+*.trx
+coverage*.xml
+coverage*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NuGet
+*.nupkg
+*.snupkg
+project.lock.json
+
+# Local app settings / scratch
+*.cutback.bak

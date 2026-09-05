@@ -1,0 +1,40 @@
+<Project>
+
+  <!--
+    Central package version management. Every PackageReference in the solution gets its version
+    from here, so the whole dependency set is visible in one place for licence review.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+    <AvaloniaVersion>11.3.20</AvaloniaVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- UI (MIT) -->
+    <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+    <PackageVersion Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)" />
+
+    <!-- MVVM (MIT) -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+
+    <!-- Video playback (LGPL-2.1+) -->
+    <PackageVersion Include="LibVLCSharp" Version="3.10.1" />
+    <PackageVersion Include="LibVLCSharp.Avalonia" Version="3.10.1" />
+    <PackageVersion Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
+    <PackageVersion Include="VideoLAN.LibVLC.Mac" Version="3.1.3.1" />
+
+    <!-- FFmpeg CLI wrapper (MIT) -->
+    <PackageVersion Include="FFMpegCore" Version="5.4.0" />
+
+    <!-- Tests (Apache-2.0 / MIT) -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageVersion Include="FluentAssertions" Version="7.2.2" />
+  </ItemGroup>
+
+</Project>

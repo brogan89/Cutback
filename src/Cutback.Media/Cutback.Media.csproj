@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Everything that shells out to ffmpeg / ffprobe. -->
+
+  <ItemGroup>
+    <PackageReference Include="FFMpegCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cutback.Core\Cutback.Core.csproj" />
+  </ItemGroup>
+
+</Project>

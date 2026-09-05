@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Phase 2/3 seams: ITranscriber (local speech-to-text) and ICutSuggester (Claude reasoning over a
+    text transcript). Interfaces and NotImplemented stubs only for now. No speech-recognition or
+    HTTP dependencies may be added here until those phases begin.
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cutback.Core\Cutback.Core.csproj" />
+  </ItemGroup>
+
+</Project>
