@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Cutback.App.ViewModels"
         xmlns:vlc="clr-namespace:LibVLCSharp.Avalonia;assembly=LibVLCSharp.Avalonia"
+        xmlns:controls="using:Cutback.App.Controls"
         x:Class="Cutback.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding Title}"
@@ -70,9 +71,15 @@
       </Grid>
     </Border>
 
-    <!-- Timeline (step 5) -->
-    <Border Grid.Row="4" Height="180" Background="#151518" BorderBrush="#2E2E35" BorderThickness="0,1,0,0">
-      <TextBlock Text="Timeline" Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    <!-- Timeline -->
+    <Border Grid.Row="4" Height="180" BorderBrush="#2E2E35" BorderThickness="0,1,0,0">
+      <controls:TimelineControl Segments="{Binding Segments}"
+                                Waveform="{Binding Waveform}"
+                                Duration="{Binding DurationSeconds}"
+                                Position="{Binding PositionSeconds}"
+                                SeekCommand="{Binding SeekCommand}"
+                                ToggleSegmentCommand="{Binding ToggleSegmentCommand}"
+                                MoveBoundaryCommand="{Binding MoveBoundaryCommand}" />
     </Border>
 
     <!-- Status / progress -->

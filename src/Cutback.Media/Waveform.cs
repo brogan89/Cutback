@@ -96,6 +96,48 @@ public sealed class Waveform
     }
 
     /// <summary>
+    /// Nudges <paramref name="time"/> to the quietest point within ±<paramref name="windowSeconds"/>
+    /// so a cut placed there lands in a lull rather than mid-waveform. With only min/max peaks a
+    /// true zero crossing is not knowable, so "quietest 2 ms bucket" is the practical equivalent;
+    /// ties go to the bucket nearest the requested time. Returns the bucket centre.
+    /// </summary>
+    public double SnapToZeroCrossing(double time, double windowSeconds)
+    {
+        var level = Levels[0];
+        var count = level.Peaks.Count;
+        if (count == 0)
+        {
+            return time;
+        }
+
+        var spb = level.SecondsPerBucket;
+        var duration = count * spb;
+        time = Math.Clamp(time, 0, duration);
+
+        var centre = Math.Clamp((int)(time / spb), 0, count - 1);
+        var radius = Math.Max(0, (int)Math.Round(windowSeconds / spb));
+        var lo = Math.Max(0, centre - radius);
+        var hi = Math.Min(count - 1, centre + radius);
+
+        var best = centre;
+        var bestAmplitude = Amplitude(level.Peaks[centre]);
+        for (var i = lo; i <= hi; i++)
+        {
+            var amplitude = Amplitude(level.Peaks[i]);
+            if (amplitude < bestAmplitude
+                || (amplitude == bestAmplitude && Math.Abs(i - centre) < Math.Abs(best - centre)))
+            {
+                best = i;
+                bestAmplitude = amplitude;
+            }
+        }
+
+        return Math.Min(duration, (best + 0.5) * spb);
+    }
+
+    private static int Amplitude(Peak p) => Math.Max(-(int)p.Min, (int)p.Max);
+
+    /// <summary>
     /// The level to draw at a given zoom: the coarsest whose buckets are still no wider than one
     /// pixel, so the renderer only ever merges buckets, never stretches them. Falls back to the
     /// finest level when zoomed in past it and the coarsest when zoomed out past it.

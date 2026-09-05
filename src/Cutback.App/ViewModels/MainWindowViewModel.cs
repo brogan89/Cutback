@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Cutback.App.Controls;
 using Cutback.App.Playback;
 using Cutback.App.Services;
 using Cutback.Core;
@@ -26,7 +27,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _dialogs = dialogs;
         _settings = settings;
 
-        _player.PositionChanged += (_, seconds) => PositionSeconds = seconds;
+        _player.PositionChanged += (_, seconds) => OnPlayerPosition(seconds);
         _player.PlaybackStateChanged += (_, _) => IsPlaying = _player.IsPlaying;
     }
 
@@ -164,8 +165,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(HasProject))]
     private void PlayPause() => _player.TogglePlayPause();
 
-    /// <summary>Seeks the preview. Called by the timeline and transport controls.</summary>
-    public void Seek(double seconds)
+    /// <summary>Seeks the preview. Bound to the timeline's ruler and used by transport controls.</summary>
+    [RelayCommand]
+    private void Seek(double seconds)
     {
         if (!HasProject)
         {
@@ -173,6 +175,64 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         _player.Seek(Math.Clamp(seconds, 0, DurationSeconds));
+    }
+
+    [RelayCommand]
+    private void ToggleSegment(int index)
+    {
+        if (Segments is null || index < 0 || index >= Segments.Count)
+        {
+            return;
+        }
+
+        Segments.Toggle(index);
+    }
+
+    [RelayCommand]
+    private void MoveBoundary(BoundaryMove move)
+    {
+        if (Segments is null || move.BoundaryIndex < 1 || move.BoundaryIndex >= Segments.Count)
+        {
+            return;
+        }
+
+        Segments.MoveBoundary(move.BoundaryIndex, move.Time);
+    }
+
+    // ---- playback skipping --------------------------------------------------------------------
+
+    /// <summary>
+    /// Preview follows the edit: while playing, entering a removed segment jumps to the start of the
+    /// next kept one. The seek visibly hitches; that is accepted for the MVP (see CLAUDE.md). When
+    /// paused the playhead may sit anywhere so the user can inspect a cut.
+    /// </summary>
+    private void OnPlayerPosition(double seconds)
+    {
+        PositionSeconds = seconds;
+
+        if (!_player.IsPlaying || Segments is null)
+        {
+            return;
+        }
+
+        var index = Segments.IndexAt(seconds);
+        if (index < 0 || Segments.Segments[index].Enabled)
+        {
+            return;
+        }
+
+        for (var i = index + 1; i < Segments.Count; i++)
+        {
+            if (Segments.Segments[i].Enabled)
+            {
+                _player.Seek(Segments.Segments[i].Start);
+                return;
+            }
+        }
+
+        // Nothing kept after this point: the edited video is over.
+        _player.Pause();
+        _player.Seek(DurationSeconds);
     }
 
     // ---- helpers ------------------------------------------------------------------------------
