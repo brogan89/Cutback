@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Cutback.Core.Models;
 
 /// <summary>
@@ -18,6 +20,7 @@ public sealed record Segment(
     SegmentOrigin Origin,
     string? Reason)
 {
+    [JsonIgnore]
     public double Duration => End - Start;
 
     /// <summary>True if <paramref name="time"/> falls within <c>[Start, End)</c>.</summary>
