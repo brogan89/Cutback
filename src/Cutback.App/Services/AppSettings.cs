@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Cutback.Core.Detection;
 
 namespace Cutback.App.Services;
 
@@ -22,6 +23,12 @@ public sealed record AppSettings
 
     /// <summary>Most recent first. Capped by <see cref="AppSettingsStore.MaxRecentFiles"/>.</summary>
     public IReadOnlyList<string> RecentFiles { get; set; } = [];
+
+    /// <summary>Key of the Whisper model used for transcription, e.g. <c>base.en</c>. See <c>WhisperModelInfo</c>.</summary>
+    public string WhisperModel { get; set; } = "base.en";
+
+    /// <summary>Words that "Remove filler words" cuts. Matched after <see cref="FillerDetector.Normalize"/>.</summary>
+    public IReadOnlyList<string> FillerWords { get; set; } = FillerDetector.DefaultWords;
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, WriteIndented = true)]

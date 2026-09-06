@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Cutback.Analysis;
 using Cutback.App.Controls;
 using Cutback.App.Playback;
 using Cutback.App.Services;
@@ -19,6 +20,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IDialogService _dialogs;
     private readonly AppSettingsStore _settings;
     private readonly TempSession _temp;
+    private readonly ModelStore _models;
     private readonly EditHistory<Segment[]> _history;
     private Segment[]? _dragSnapshot;
     private FfmpegLocation? _ffmpeg;
@@ -27,18 +29,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private bool _skipping;
     private double? _skipTarget;
 
-    public MainWindowViewModel(IVideoPlayer player, IFileDialogService files, IDialogService dialogs, AppSettingsStore settings, TempSession temp)
+    public MainWindowViewModel(IVideoPlayer player, IFileDialogService files, IDialogService dialogs, AppSettingsStore settings, TempSession temp, ModelStore models)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(dialogs);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(temp);
+        ArgumentNullException.ThrowIfNull(models);
         _player = player;
         _files = files;
         _dialogs = dialogs;
         _settings = settings;
         _temp = temp;
+        _models = models;
 
         _history = new EditHistory<Segment[]>(settings.Current.UndoHistoryLimit);
         _history.Changed += (_, _) =>
@@ -651,7 +655,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task ShowPreferencesAsync()
     {
-        var preferences = new PreferencesViewModel(_settings);
+        var preferences = new PreferencesViewModel(_settings, _models);
         await _dialogs.ShowPreferencesAsync(preferences);
         _history.Limit = _settings.Current.UndoHistoryLimit;
     }
