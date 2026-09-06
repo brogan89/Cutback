@@ -14,6 +14,8 @@
     <Deterministic>true</Deterministic>
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
     <RootNamespace>$(MSBuildProjectName)</RootNamespace>
+    <!-- Overridden by -p:Version=<tag> in the release workflow. -->
+    <Version>0.1.0</Version>
     <Product>Cutback</Product>
     <Authors>Cutback contributors</Authors>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>

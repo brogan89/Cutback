@@ -3,11 +3,9 @@ namespace Cutback.Media;
 /// <summary>Where the ffmpeg and ffprobe binaries were found.</summary>
 /// <param name="FfmpegPath">Full path to the ffmpeg executable.</param>
 /// <param name="FfprobePath">Full path to the ffprobe executable, always in the same directory.</param>
+/// <param name="Directory">The directory containing both binaries, using the target platform's separators.</param>
 /// <param name="Source">Which step of the resolution order produced this location.</param>
-public sealed record FfmpegLocation(string FfmpegPath, string FfprobePath, FfmpegLocationSource Source)
-{
-    public string Directory => Path.GetDirectoryName(FfmpegPath) ?? string.Empty;
-}
+public sealed record FfmpegLocation(string FfmpegPath, string FfprobePath, string Directory, FfmpegLocationSource Source);
 
 public enum FfmpegLocationSource
 {

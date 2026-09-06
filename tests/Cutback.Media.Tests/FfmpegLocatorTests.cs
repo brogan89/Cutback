@@ -50,6 +50,22 @@ public sealed class FfmpegLocatorTests
     }
 
     [Fact]
+    public void User_setting_uses_the_target_platform_separators_not_the_host()
+    {
+        // Path.GetDirectoryName would mangle this on a non-Windows host.
+        var locator = Locator(
+            OSPlatform.Windows,
+            [@"C:\Tools\ffmpeg\ffmpeg.exe", @"C:\Tools\ffmpeg\ffprobe.exe"],
+            userSetting: @"C:\Tools\ffmpeg\ffmpeg.exe");
+
+        var location = locator.Locate();
+
+        location.FfprobePath.Should().Be(@"C:\Tools\ffmpeg\ffprobe.exe");
+        location.Directory.Should().Be(@"C:\Tools\ffmpeg");
+        location.Source.Should().Be(FfmpegLocationSource.UserSetting);
+    }
+
+    [Fact]
     public void A_stale_user_setting_falls_through_to_PATH()
     {
         var locator = Locator(

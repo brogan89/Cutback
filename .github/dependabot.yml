@@ -1,0 +1,8 @@
+# Only GitHub Actions. NuGet is deliberately excluded: Avalonia is pinned to 11.3.x
+# (LibVLCSharp.Avalonia compatibility) and FluentAssertions to 7.x (licence). See CLAUDE.md.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

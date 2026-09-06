@@ -10,6 +10,8 @@
   ├─────── kept ───────┤├ removed ─┤├─────── kept ───────┤
 ```
 
+[![CI](https://github.com/brogan89/Cutback/actions/workflows/ci.yml/badge.svg)](https://github.com/brogan89/Cutback/actions/workflows/ci.yml)
+
 **Cutback** is a cross-platform desktop video editor that automatically removes dead air and spoken filler words
 from talking-head screen recordings.
 
@@ -20,6 +22,36 @@ boundaries, and export the result. Editing is non-destructive and the source fil
 modified.
 
 **Status:** Phase 1 (MVP) in progress. See [Roadmap](#roadmap).
+
+## Installing a release
+
+Prebuilt, self-contained binaries are on the
+[Releases page](https://github.com/brogan89/Cutback/releases). They bundle the .NET runtime but
+**not** FFmpeg, and libVLC is bundled only on Windows; see [Requirements](#requirements) for what to
+install alongside. The binaries are not code-signed, so each OS shows a one-time warning.
+
+**Windows (x64)** — unzip `Cutback-<version>-win-x64.zip` and run `Cutback.exe`. If SmartScreen
+says "Windows protected your PC", choose *More info* → *Run anyway*.
+
+**macOS (Apple Silicon)** — unzip `Cutback-<version>-osx-arm64.zip` and drag `Cutback.app` to
+Applications. Gatekeeper blocks unsigned apps, so either clear the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Cutback.app
+```
+
+or open it once, then go to *System Settings* → *Privacy & Security* and click *Open Anyway*.
+Requires [VLC.app](https://www.videolan.org/) in `/Applications` and `ffmpeg` on `PATH`.
+
+**Linux (x64)** — extract and run:
+
+```bash
+tar xzf Cutback-<version>-linux-x64.tar.gz
+./Cutback-<version>-linux-x64/Cutback
+```
+
+Requires `ffmpeg`, the system libVLC packages listed under [Requirements](#requirements), and the
+usual desktop libraries (`libx11-6 libice6 libsm6 libfontconfig1` on Debian/Ubuntu).
 
 ## Requirements
 
@@ -94,12 +126,41 @@ The same commands work on Windows (PowerShell or cmd), macOS, and Linux.
 
 ### Publishing a self-contained build
 
+This is what the release workflow runs for each platform:
+
 ```bash
-# pick one RID: win-x64, osx-arm64, osx-x64, linux-x64
-dotnet publish src/Cutback.App -c Release -r osx-arm64 --self-contained
+# pick one RID: win-x64, osx-arm64, linux-x64
+dotnet publish src/Cutback.App -c Release -r osx-arm64 --self-contained true \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:PublishTrimmed=false -p:DebugType=embedded -p:PublishDocumentationFiles=false \
+  -p:Version=0.0.0-local -o artifacts/publish/osx-arm64
 ```
 
-Output lands in `src/Cutback.App/bin/Release/net10.0/<rid>/publish/`.
+Windows must be published *on* Windows: the native libVLC package is only referenced when the
+build host is Windows. Trimming is off because LibVLCSharp is not trim-annotated.
+
+On macOS, wrap the output in an app bundle (publish with `IncludeNativeLibrariesForSelfExtract=false`
+so the dylibs stay loose for signing):
+
+```bash
+scripts/package-macos.sh artifacts/publish/osx-arm64 0.0.0-local artifacts/dist
+```
+
+### Releasing
+
+CI (`.github/workflows/ci.yml`) runs formatting, build and tests on Linux, Windows and macOS for
+every push and pull request. Pushing a `v*` tag runs `.github/workflows/release.yml`, which
+publishes all three platforms and creates a GitHub Release with the archives and a
+`SHA256SUMS.txt`:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Bump `<Version>` in `Directory.Build.props` and the `assemblyIdentity` version in
+`src/Cutback.App/app.manifest` in the same commit. To test the packaging without releasing, run
+the *Release* workflow from the Actions tab; it uploads the archives as workflow artifacts only.
 
 ## Using it
 
