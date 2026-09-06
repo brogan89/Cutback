@@ -22,6 +22,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private FfmpegLocation? _ffmpeg;
     private CancellationTokenSource? _openCts;
     private bool _loadingSettings;
+    private bool _skipping;
+    private double? _skipTarget;
 
     public MainWindowViewModel(IVideoPlayer player, IFileDialogService files, IDialogService dialogs, AppSettingsStore settings, TempSession temp)
     {
@@ -486,6 +488,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        _skipTarget = null;
         _player.Seek(Math.Clamp(seconds, 0, DurationSeconds));
     }
 
@@ -520,7 +523,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         PositionSeconds = seconds;
 
-        if (!_player.IsPlaying || Segments is null)
+        // Seek raises PositionChanged synchronously, so this handler can be re-entered by its own
+        // seek. Never act on a position while a skip is already in progress: an unguarded loop here
+        // once overflowed the stack.
+        if (_skipping || !_player.IsPlaying || Segments is null)
         {
             return;
         }
@@ -528,21 +534,39 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var index = Segments.IndexAt(seconds);
         if (index < 0 || Segments.Segments[index].Enabled)
         {
+            _skipTarget = null;
             return;
         }
 
-        for (var i = index + 1; i < Segments.Count; i++)
+        // VLC keeps reporting a few stale positions inside the cut after a seek. If we already
+        // asked for a jump past this point, wait for it to land rather than seeking again.
+        if (_skipTarget is { } target && seconds < target)
         {
-            if (Segments.Segments[i].Enabled)
-            {
-                _player.Seek(Segments.Segments[i].Start);
-                return;
-            }
+            return;
         }
 
-        // Nothing kept after this point: the edited video is over.
-        _player.Pause();
-        _player.Seek(DurationSeconds);
+        _skipping = true;
+        try
+        {
+            for (var i = index + 1; i < Segments.Count; i++)
+            {
+                if (Segments.Segments[i].Enabled)
+                {
+                    _skipTarget = Segments.Segments[i].Start;
+                    _player.Seek(_skipTarget.Value);
+                    return;
+                }
+            }
+
+            // Nothing kept after this point: the edited video is over.
+            _skipTarget = null;
+            _player.Pause();
+            _player.Seek(DurationSeconds);
+        }
+        finally
+        {
+            _skipping = false;
+        }
     }
 
     // ---- detection ----------------------------------------------------------------------------

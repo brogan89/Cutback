@@ -130,7 +130,9 @@ public sealed class VlcVideoPlayer : IVideoPlayer
             return;
         }
 
-        var ms = (long)Math.Round(Math.Clamp(seconds, 0, Math.Max(0, _duration)) * 1000);
+        // Round up, never down: a seek aimed at a segment boundary must land inside that segment,
+        // or the caller that skips removed regions sees itself still inside the cut and seeks again.
+        var ms = (long)Math.Ceiling(Math.Clamp(seconds, 0, Math.Max(0, _duration)) * 1000 - 1e-6);
         var state = MediaPlayer.State;
         if (state is VLCState.Playing or VLCState.Paused)
         {
