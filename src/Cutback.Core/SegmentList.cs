@@ -140,7 +140,24 @@ public sealed class SegmentList
     /// <param name="end">End in seconds; clamped to <c>[0, Duration]</c>.</param>
     /// <param name="enabled">Whether the range is kept.</param>
     /// <returns>The index of the resulting segment, or -1 if the range was shorter than <see cref="MinSegmentLength"/> and nothing changed.</returns>
-    public int SetRange(double start, double end, bool enabled)
+    public int SetRange(double start, double end, bool enabled) => SetRange(start, end, enabled, SegmentOrigin.Manual, null);
+
+    /// <summary>
+    /// <see cref="SetRange(double, double, bool)"/> with an explicit origin and reason, for
+    /// detectors that carve a cut into the existing partition rather than re-laying it.
+    /// </summary>
+    public int SetRange(double start, double end, bool enabled, SegmentOrigin origin, string? reason)
+    {
+        var index = SetRangeCore(start, end, enabled, origin, reason);
+        if (index >= 0)
+        {
+            OnChanged();
+        }
+
+        return index;
+    }
+
+    private int SetRangeCore(double start, double end, bool enabled, SegmentOrigin origin, string? reason)
     {
         if (!double.IsFinite(start) || !double.IsFinite(end))
         {
@@ -169,13 +186,11 @@ public sealed class SegmentList
             Start = start,
             End = end,
             Enabled = enabled,
-            Origin = SegmentOrigin.Manual,
-            Reason = null,
+            Origin = origin,
+            Reason = reason,
         };
         _segments.RemoveRange(first, last - first + 1);
         _segments.Insert(first, section);
-
-        OnChanged();
         return first;
     }
 
@@ -195,6 +210,18 @@ public sealed class SegmentList
             throw new ArgumentOutOfRangeException(nameof(index), index, $"Segment index must be within 0..{_segments.Count - 1}.");
         }
 
+        if (!DissolveCore(index))
+        {
+            return false;
+        }
+
+        OnChanged();
+        return true;
+    }
+
+    /// <summary><see cref="Dissolve"/> without raising <see cref="Changed"/>. False if this is the only segment.</summary>
+    private bool DissolveCore(int index)
+    {
         if (_segments.Count < 2)
         {
             return false;
@@ -227,7 +254,6 @@ public sealed class SegmentList
             _segments.RemoveAt(index);
         }
 
-        OnChanged();
         return true;
     }
 
@@ -408,6 +434,45 @@ public sealed class SegmentList
         _segments.Clear();
         _segments.AddRange(result);
         OnChanged();
+    }
+
+    /// <summary>
+    /// Applies a fresh filler-word detection result. Every existing <see cref="SegmentOrigin.Filler"/>
+    /// segment is dissolved into its neighbours first, so a re-run replaces the previous result,
+    /// then each cut is carved out of whatever is there with <see cref="SegmentOrigin.Filler"/>.
+    /// Auto and manual segments outside the cuts are untouched; the caller is responsible for not
+    /// passing cuts that overlap manual segments (see <c>FillerCutPlanner</c>).
+    /// </summary>
+    /// <returns>The number of cuts applied.</returns>
+    public int ApplyFillerCuts(IEnumerable<PlannedCut> cuts)
+    {
+        ArgumentNullException.ThrowIfNull(cuts);
+
+        var changed = false;
+        for (var i = _segments.Count - 1; i >= 0; i--)
+        {
+            if (_segments[i].Origin == SegmentOrigin.Filler && DissolveCore(i))
+            {
+                changed = true;
+            }
+        }
+
+        var applied = 0;
+        foreach (var cut in cuts.OrderBy(c => c.Start))
+        {
+            if (SetRangeCore(cut.Start, cut.End, enabled: false, SegmentOrigin.Filler, cut.Reason) >= 0)
+            {
+                applied++;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            OnChanged();
+        }
+
+        return applied;
     }
 
     /// <summary>The stretches of <c>[0, Duration]</c> not covered by locked segments, in order.</summary>
