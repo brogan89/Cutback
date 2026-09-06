@@ -53,7 +53,7 @@ public sealed class FfmpegLocator
     {
         if (_userConfiguredPath is not null)
         {
-            var dir = _fileExists(_userConfiguredPath) ? Path.GetDirectoryName(_userConfiguredPath) : _userConfiguredPath;
+            var dir = _fileExists(_userConfiguredPath) ? DirectoryOf(_userConfiguredPath) : _userConfiguredPath;
             if (dir is not null && Probe(dir, FfmpegLocationSource.UserSetting) is { } fromSetting)
             {
                 return fromSetting;
@@ -92,14 +92,30 @@ public sealed class FfmpegLocator
         var ffmpeg = Join(directory, ExecutableName("ffmpeg"));
         var ffprobe = Join(directory, ExecutableName("ffprobe"));
         return _fileExists(ffmpeg) && _fileExists(ffprobe)
-            ? new FfmpegLocation(ffmpeg, ffprobe, source)
+            ? new FfmpegLocation(ffmpeg, ffprobe, TrimSeparators(directory), source)
             : null;
     }
+
+    // Path.GetDirectoryName and Path.Combine use the *host* OS separators, which is wrong when
+    // this locator is configured for another platform (as the unit tests do), so paths are split
+    // and joined by hand using the target platform's separator.
 
     private string Join(string directory, string file)
     {
         var separator = _platform == OSPlatform.Windows ? '\\' : '/';
-        return directory.TrimEnd('\\', '/') + separator + file;
+        return TrimSeparators(directory) + separator + file;
+    }
+
+    private string? DirectoryOf(string path)
+    {
+        var index = _platform == OSPlatform.Windows ? path.LastIndexOfAny(['\\', '/']) : path.LastIndexOf('/');
+        return index < 0 ? null : path[..Math.Max(index, 1)];
+    }
+
+    private static string TrimSeparators(string directory)
+    {
+        var trimmed = directory.TrimEnd('\\', '/');
+        return trimmed.Length == 0 ? directory : trimmed;
     }
 
     private IEnumerable<string> PathDirectories()
