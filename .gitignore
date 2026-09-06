@@ -30,3 +30,7 @@ project.lock.json
 
 # Local app settings / scratch
 *.cutback.bak
+
+# Claude Code worktrees and SDD scratch
+.claude/worktrees/
+.superpowers/
