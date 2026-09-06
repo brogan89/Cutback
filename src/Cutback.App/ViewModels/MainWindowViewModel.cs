@@ -63,7 +63,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProject), nameof(Title), nameof(SourceFileName), nameof(ProjectName))]
-    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(TranscribeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand))]
     public partial CutbackProject? Project { get; private set; }
 
     /// <summary>Where the project was last saved or loaded from. Null for an unsaved project.</summary>
@@ -279,7 +279,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ---- busy ---------------------------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand), nameof(TranscribeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand))]
     public partial bool IsBusy { get; private set; }
 
     [ObservableProperty]
@@ -851,6 +851,56 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             EndBusy();
         }
+    }
+
+    /// <summary>Whisper word timing is coarser than a hand-placed boundary, so word edges get a wider snap window than a drag.</summary>
+    private const double WordSnapWindowSeconds = 0.040;
+
+    [RelayCommand(CanExecute = nameof(CanEdit))]
+    private async Task RemoveFillerWordsAsync()
+    {
+        if (Project is null || Segments is null)
+        {
+            return;
+        }
+
+        if (!HasTranscript && !await TranscribeCoreAsync())
+        {
+            return;
+        }
+
+        var fillers = FillerDetector.Find(Transcript, _settings.Current.FillerWords);
+        var spans = fillers.Select(w =>
+        {
+            var (start, end) = SnapWordSpan(w.Start, w.End);
+            return new FillerSpan(start, end, FillerDetector.Normalize(w.Text));
+        });
+        var cuts = FillerCutPlanner.Plan(spans, Segments.Segments, CurrentSettings, DurationSeconds);
+
+        Edit(s => s.ApplyFillerCuts(cuts));
+        IsTranscriptOpen = true;
+
+        var removed = cuts.Sum(c => c.Duration);
+        StatusMessage = cuts.Count switch
+        {
+            0 when fillers.Count == 0 => "No filler words found.",
+            0 => "Every filler word is already cut.",
+            1 => $"Removed 1 filler word, {TimeFormat.Clock(removed)} cut.",
+            _ => $"Removed {cuts.Count} filler words, {TimeFormat.Clock(removed)} cut.",
+        };
+    }
+
+    /// <summary>Snaps both edges of a word to the quietest nearby waveform bucket, falling back to the raw edges if snapping would collapse the word.</summary>
+    private (double Start, double End) SnapWordSpan(double start, double end)
+    {
+        if (Waveform is not { } waveform)
+        {
+            return (start, end);
+        }
+
+        var snappedStart = waveform.SnapToZeroCrossing(start, WordSnapWindowSeconds);
+        var snappedEnd = waveform.SnapToZeroCrossing(end, WordSnapWindowSeconds);
+        return snappedEnd - snappedStart < 0.02 ? (start, end) : (snappedStart, snappedEnd);
     }
 
     // ---- export -------------------------------------------------------------------------------

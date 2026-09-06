@@ -79,6 +79,7 @@
         <MenuItem x:Name="RedoMenuItem" Header="_Redo" Command="{Binding RedoCommand}" />
         <Separator />
         <MenuItem Header="_Transcribe" Command="{Binding TranscribeCommand}" />
+        <MenuItem Header="Remove _Filler Words" Command="{Binding RemoveFillerWordsCommand}" />
       </MenuItem>
     </Menu>
 
@@ -87,6 +88,7 @@
       <StackPanel Orientation="Horizontal" Spacing="8">
         <Button Classes="toolbar" Command="{Binding DetectSilenceCommand}" Content="Detect silence" />
         <ToggleButton Classes="toolbar" IsChecked="{Binding IsSettingsOpen}" Content="Detection settings" />
+        <Button Classes="toolbar" Command="{Binding RemoveFillerWordsCommand}" Content="Remove filler words" />
         <TextBlock Classes="dim" VerticalAlignment="Center" Margin="12,0,0,0" Text="{Binding SourceFileName}" />
       </StackPanel>
     </Border>
