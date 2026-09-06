@@ -1,0 +1,171 @@
+name: Release
+
+# Pushing a tag like v0.2.0 builds every platform and publishes a GitHub Release.
+# Running the workflow by hand builds the same archives as workflow artifacts only.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to stamp, without a leading v. No GitHub Release is created.
+        default: 0.0.0-ci
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      is_release: ${{ steps.v.outputs.is_release }}
+    steps:
+      - id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            is_release=true
+          else
+            version="$INPUT_VERSION"
+            is_release=false
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Version '$version' is not X.Y.Z or X.Y.Z-prerelease"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "is_release=$is_release" >> "$GITHUB_OUTPUT"
+          echo "Building Cutback $version (release: $is_release)"
+
+  build:
+    name: ${{ matrix.rid }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # VideoLAN.LibVLC.Windows is only referenced when the build host is Windows,
+          # so win-x64 must be published on a Windows runner.
+          - os: windows-latest
+            rid: win-x64
+            natives: true
+          - os: ubuntu-latest
+            rid: linux-x64
+            natives: true
+          # Inside an .app bundle loose dylibs are what codesign expects, so do not self-extract.
+          - os: macos-latest
+            rid: osx-arm64
+            natives: false
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      RID: ${{ matrix.rid }}
+    steps:
+      - name: Keep LF line endings
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Publish
+        shell: bash
+        run: |
+          dotnet publish src/Cutback.App -c Release -r "$RID" --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=${{ matrix.natives }} \
+            -p:PublishTrimmed=false \
+            -p:PublishReadyToRun=false \
+            -p:DebugType=embedded \
+            -p:PublishDocumentationFiles=false \
+            -p:PublishDocumentationFile=false \
+            -p:Version="$VERSION" \
+            -p:ContinuousIntegrationBuild=true \
+            -o "artifacts/publish/$RID"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          name="Cutback-$VERSION-$RID"
+          mkdir -p "artifacts/stage/$name" artifacts/dist
+          cp -R "artifacts/publish/$RID"/. "artifacts/stage/$name/"
+          cp LICENSE THIRD-PARTY-NOTICES.md "artifacts/stage/$name/"
+          (cd artifacts/stage && 7z a -tzip "../dist/$name.zip" "$name")
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          name="Cutback-$VERSION-$RID"
+          mkdir -p "artifacts/stage/$name" artifacts/dist
+          cp -R "artifacts/publish/$RID"/. "artifacts/stage/$name/"
+          cp LICENSE THIRD-PARTY-NOTICES.md "artifacts/stage/$name/"
+          chmod +x "artifacts/stage/$name/Cutback"
+          tar -czf "artifacts/dist/$name.tar.gz" -C artifacts/stage "$name"
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p artifacts/dist
+          scripts/package-macos.sh "artifacts/publish/$RID" "$VERSION" artifacts/dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Cutback-${{ env.VERSION }}-${{ matrix.rid }}
+          path: artifacts/dist/*
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [version, build]
+    if: needs.version.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists; replacing assets"
+            gh release upload "$GITHUB_REF_NAME" --clobber dist/*
+          else
+            args=(--verify-tag --generate-notes --title "Cutback $VERSION")
+            if [[ "$VERSION" == *-* ]]; then
+              args+=(--prerelease)
+            fi
+            gh release create "$GITHUB_REF_NAME" "${args[@]}" dist/*
+          fi
