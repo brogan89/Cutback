@@ -39,10 +39,10 @@ public sealed class ModelStore
             return path;
         }
 
-        Directory.CreateDirectory(CacheDirectory);
         var partial = path + ".part";
         try
         {
+            Directory.CreateDirectory(CacheDirectory);
             cancellationToken.ThrowIfCancellationRequested();
             using var source = await WhisperGgmlDownloader.Default
                 .GetGgmlModelAsync(info.GgmlType, QuantizationType.NoQuantization, cancellationToken)

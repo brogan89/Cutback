@@ -10,6 +10,10 @@ public sealed class ModelStoreTests : IDisposable
         {
             Directory.Delete(_dir, recursive: true);
         }
+        else if (File.Exists(_dir))
+        {
+            File.Delete(_dir);
+        }
     }
 
     [Fact]
@@ -59,5 +63,19 @@ public sealed class ModelStoreTests : IDisposable
         await act.Should().ThrowAsync<OperationCanceledException>();
         Directory.Exists(_dir).Should().BeTrue();
         Directory.GetFiles(_dir).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task EnsureAsync_wraps_an_uncreatable_cache_directory_in_ModelDownloadException()
+    {
+        // A file where the directory should be makes CreateDirectory throw IOException.
+        Directory.CreateDirectory(Path.GetDirectoryName(_dir)!);
+        File.WriteAllBytes(_dir, [0]);
+        var store = new ModelStore(_dir);
+
+        var act = () => store.EnsureAsync(WhisperModel.TinyEn, null, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<ModelDownloadException>())
+            .Which.Message.Should().Contain("tiny.en").And.Contain(_dir);
     }
 }
