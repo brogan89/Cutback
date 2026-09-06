@@ -29,6 +29,10 @@
     <!-- FFmpeg CLI wrapper (MIT) -->
     <PackageVersion Include="FFMpegCore" Version="5.4.0" />
 
+    <!-- Speech recognition (MIT; the runtime bundles whisper.cpp and ggml, both MIT) -->
+    <PackageVersion Include="Whisper.net" Version="1.9.1" />
+    <PackageVersion Include="Whisper.net.Runtime" Version="1.9.1" />
+
     <!-- Tests (Apache-2.0 / MIT) -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
