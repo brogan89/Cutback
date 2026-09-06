@@ -67,10 +67,8 @@
     <!-- Toolbar -->
     <Border Grid.Row="1" Background="#242429" Padding="10,8">
       <StackPanel Orientation="Horizontal" Spacing="8">
-        <Button Classes="toolbar" Command="{Binding OpenVideoCommand}" Content="Open video…" />
         <Button Classes="toolbar" Command="{Binding DetectSilenceCommand}" Content="Detect silence" />
         <ToggleButton Classes="toolbar" IsChecked="{Binding IsSettingsOpen}" Content="Detection settings" />
-        <Button Classes="toolbar" Command="{Binding SaveProjectCommand}" Content="Save" />
         <TextBlock Classes="dim" VerticalAlignment="Center" Margin="12,0,0,0" Text="{Binding SourceFileName}" />
       </StackPanel>
     </Border>
@@ -103,7 +101,7 @@
           <Panel DragDrop.AllowDrop="True" Background="Transparent">
             <StackPanel IsVisible="{Binding !HasProject}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
               <TextBlock Text="Drop a video here" FontSize="22" Foreground="#C8C8D0" HorizontalAlignment="Center" />
-              <TextBlock Text="or use Open video… to get started" Classes="dim" HorizontalAlignment="Center" />
+              <TextBlock Text="or use File › Open Video… to get started" Classes="dim" HorizontalAlignment="Center" />
             </StackPanel>
           </Panel>
         </vlc:VideoView>
