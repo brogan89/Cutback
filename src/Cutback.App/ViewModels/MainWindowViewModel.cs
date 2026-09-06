@@ -389,9 +389,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return false;
         }
 
-        var suggested = ProjectPath is not null
-            ? Path.GetFileName(ProjectPath)
-            : Path.GetFileNameWithoutExtension(Project.Source.Path) + ProjectSerializer.FileExtension;
+        // Suggest the stem only. The macOS save panel appends DefaultExtension even when the
+        // suggested name already has it, which produced "name.cutback.cutback".
+        var suggested = Path.GetFileNameWithoutExtension(ProjectPath ?? Project.Source.Path);
         var path = await _files.PickProjectToSaveAsync(suggested);
         return path is not null && await SaveToAsync(path);
     }
@@ -403,10 +403,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return false;
         }
 
-        if (!string.Equals(Path.GetExtension(path), ProjectSerializer.FileExtension, StringComparison.OrdinalIgnoreCase))
-        {
-            path += ProjectSerializer.FileExtension;
-        }
+        path = NormalizeExtension(path, ProjectSerializer.FileExtension);
 
         try
         {
@@ -443,6 +440,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             SaveChoice.Discard => true,
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// Ensures exactly one <paramref name="extension"/> on the end of <paramref name="path"/>: adds it
+    /// if missing and collapses "name.ext.ext", which a file picker can hand back.
+    /// </summary>
+    internal static string NormalizeExtension(string path, string extension)
+    {
+        while (path.EndsWith(extension + extension, StringComparison.OrdinalIgnoreCase))
+        {
+            path = path[..^extension.Length];
+        }
+
+        return path.EndsWith(extension, StringComparison.OrdinalIgnoreCase) ? path : path + extension;
     }
 
     private void MarkDirty()

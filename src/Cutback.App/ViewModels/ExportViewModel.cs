@@ -93,10 +93,11 @@ public sealed partial class ExportViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanBrowse))]
     private async Task BrowseAsync()
     {
-        var picked = await _files.PickExportTargetAsync(OutputFileName);
+        // Stem only; the picker adds the extension (see MainWindowViewModel.SaveProjectAsAsync).
+        var picked = await _files.PickExportTargetAsync(Path.GetFileNameWithoutExtension(OutputPath));
         if (picked is not null)
         {
-            OutputPath = picked;
+            OutputPath = CollapseDoubledExtension(picked);
             if (!FastModeAvailable)
             {
                 IsFast = false;
@@ -158,6 +159,18 @@ public sealed partial class ExportViewModel : ViewModelBase
 
     /// <summary>Called by the window when the user tries to close it; false while an export runs.</summary>
     public bool CanClose => !IsExporting;
+
+    /// <summary>"name.mp4.mp4" from a picker becomes "name.mp4".</summary>
+    private static string CollapseDoubledExtension(string path)
+    {
+        var ext = Path.GetExtension(path);
+        while (ext.Length > 0 && path.EndsWith(ext + ext, StringComparison.OrdinalIgnoreCase))
+        {
+            path = path[..^ext.Length];
+        }
+
+        return path;
+    }
 
     /// <summary>"recording-cut.mp4" next to the source, numbered if that already exists.</summary>
     private static string SuggestOutputPath(string sourcePath)
