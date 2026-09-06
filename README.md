@@ -149,18 +149,19 @@ scripts/package-macos.sh artifacts/publish/osx-arm64 0.0.0-local artifacts/dist
 ### Releasing
 
 CI (`.github/workflows/ci.yml`) runs formatting, build and tests on Linux, Windows and macOS for
-every push and pull request. Pushing a `v*` tag runs `.github/workflows/release.yml`, which
-publishes all three platforms and creates a GitHub Release with the archives and a
-`SHA256SUMS.txt`:
+every push and pull request. `main` only accepts pull requests.
 
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
+Releases are manual. Bump `<Version>` in `Directory.Build.props` and the `assemblyIdentity`
+version in `src/Cutback.App/app.manifest`, merge, then open *Actions* → *Release* → *Run
+workflow* on `main`, enter the version (for example `0.2.0`, or `0.2.0-beta.1` for a prerelease)
+and tick **publish**. The workflow publishes all three platforms, creates the `v<version>` tag,
+and opens a GitHub Release with the archives and a `SHA256SUMS.txt`. It refuses to overwrite an
+existing release or tag.
 
-Bump `<Version>` in `Directory.Build.props` and the `assemblyIdentity` version in
-`src/Cutback.App/app.manifest` in the same commit. To test the packaging without releasing, run
-the *Release* workflow from the Actions tab; it uploads the archives as workflow artifacts only.
+Every merge to `main` also runs the Release workflow as a dry run: the archives are built and
+uploaded as workflow artifacts but nothing is tagged or published, so packaging breakage shows
+up before the next release. Leave **publish** unticked on a manual run to get the same dry run
+for any branch.
 
 ## Using it
 
