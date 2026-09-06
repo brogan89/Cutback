@@ -330,4 +330,52 @@ public sealed class ProjectSerializerTests
 
         doc["version"]!.GetValue<int>().Should().Be(ProjectSerializer.CurrentVersion);
     }
+
+    // ---- version 2: filler origin -------------------------------------------------------------
+
+    [Fact]
+    public void Current_version_is_2()
+    {
+        ProjectSerializer.CurrentVersion.Should().Be(2);
+    }
+
+    [Fact]
+    public void Filler_origin_round_trips_as_a_lower_case_string()
+    {
+        var segments = new[]
+        {
+            Segment.Create(0.0, 3.0, enabled: true, SegmentOrigin.Auto),
+            Segment.Create(3.0, 3.4, enabled: false, SegmentOrigin.Filler, "filler: um"),
+            Segment.Create(3.4, 12.04, enabled: true, SegmentOrigin.Auto),
+        };
+        var project = new CutbackProject(Source, segments, [], DetectionSettings.Default);
+
+        var json = ProjectSerializer.Serialize(project);
+        var loaded = ProjectSerializer.Deserialize(json);
+
+        JsonNode.Parse(json)!["segments"]![1]!["origin"]!.GetValue<string>().Should().Be("filler");
+        loaded.Segments[1].Origin.Should().Be(SegmentOrigin.Filler);
+        loaded.Segments[1].Reason.Should().Be("filler: um");
+    }
+
+    [Fact]
+    public void A_version_1_file_is_migrated_to_version_2_unchanged()
+    {
+        const string v1 = """
+            {
+              "version": 1,
+              "source": { "path": "/abs/path/to/recording.mp4", "sha256": "0123abcd", "durationSeconds": 12.04, "width": 1920, "height": 1080, "frameRate": 30.0 },
+              "segments": [
+                { "id": "a", "start": 0.0, "end": 12.04, "enabled": true, "origin": "auto", "reason": null }
+              ],
+              "transcript": [],
+              "settings": { "paddingMs": 60, "minSilenceMs": 400, "silenceThresholdDb": -34.0, "minKeepMs": 120 }
+            }
+            """;
+
+        var project = ProjectSerializer.Deserialize(v1);
+
+        project.Segments.Should().ContainSingle().Which.Id.Should().Be("a");
+        JsonNode.Parse(ProjectSerializer.Serialize(project))!["version"]!.GetValue<int>().Should().Be(2);
+    }
 }

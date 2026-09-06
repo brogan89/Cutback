@@ -520,6 +520,7 @@ public sealed class SegmentList
         }
     }
 
+    /// <summary>Manual wins over everything, then Claude, then Filler, then Auto.</summary>
     private static SegmentOrigin MergeOrigin(SegmentOrigin a, SegmentOrigin b)
     {
         if (a == SegmentOrigin.Manual || b == SegmentOrigin.Manual)
@@ -530,6 +531,11 @@ public sealed class SegmentList
         if (a == SegmentOrigin.Claude || b == SegmentOrigin.Claude)
         {
             return SegmentOrigin.Claude;
+        }
+
+        if (a == SegmentOrigin.Filler || b == SegmentOrigin.Filler)
+        {
+            return SegmentOrigin.Filler;
         }
 
         return SegmentOrigin.Auto;

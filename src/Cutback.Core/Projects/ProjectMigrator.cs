@@ -9,17 +9,22 @@ namespace Cutback.Core.Projects;
 /// <remarks>
 /// To add a schema change: bump <see cref="ProjectSerializer.CurrentVersion"/>, then register a step
 /// keyed by the version it upgrades <em>from</em> in <see cref="Default"/>. Steps mutate the JSON in
-/// place and do not touch the <c>version</c> field; the migrator bumps that itself.
+/// place and do not touch the <c>version</c> field; the migrator bumps that itself. See <see cref="Default"/> for the registered steps.
 /// </remarks>
 public sealed class ProjectMigrator
 {
     private readonly int _targetVersion;
     private readonly IReadOnlyDictionary<int, Action<JsonObject>> _steps;
 
-    /// <summary>The migrator used by <see cref="ProjectSerializer"/>. No migrations exist yet.</summary>
+    /// <summary>The migrator used by <see cref="ProjectSerializer"/>.</summary>
     public static ProjectMigrator Default { get; } = new(
         ProjectSerializer.CurrentVersion,
-        new Dictionary<int, Action<JsonObject>>());
+        new Dictionary<int, Action<JsonObject>>
+        {
+            // 1 -> 2: the "filler" segment origin was added. No field changes; the bump exists so
+            // an older build refuses a file it cannot read with its "newer version" message.
+            [1] = static _ => { },
+        });
 
     /// <param name="targetVersion">The version documents are migrated up to.</param>
     /// <param name="steps">Migration steps keyed by the version they upgrade from. Step <c>n</c> takes a version-<c>n</c> document and makes it version <c>n + 1</c>.</param>
