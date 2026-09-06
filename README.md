@@ -1,6 +1,16 @@
-# Cutback
+```text
+ ██████╗██╗   ██╗████████╗██████╗  █████╗  ██████╗██╗  ██╗
+██╔════╝██║   ██║╚══██╔══╝██╔══██╗██╔══██╗██╔════╝██║ ██╔╝
+██║     ██║   ██║   ██║   ██████╔╝███████║██║     █████╔╝ 
+██║     ██║   ██║   ██║   ██╔══██╗██╔══██║██║     ██╔═██╗ 
+╚██████╗╚██████╔╝   ██║   ██████╔╝██║  ██║╚██████╗██║  ██╗
+ ╚═════╝ ╚═════╝    ╚═╝   ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
 
-A cross-platform desktop video editor that automatically removes dead air and spoken filler words
+  ▁▂▃▅▆▇█▇▆▅▃▂▁▂▃▅▆▇▆▅▃▂▁▁▁▁▁▁▁▁▁▁▁▁▁▂▃▅▆▇█▇▆▅▃▂▁▂▃▅▆▇▆▅▃▂
+  ├─────── kept ───────┤├ removed ─┤├─────── kept ───────┤
+```
+
+**Cutback** is a cross-platform desktop video editor that automatically removes dead air and spoken filler words
 from talking-head screen recordings.
 
 One video, one timeline, one export button. Cutback is not a non-linear editor: there is no
