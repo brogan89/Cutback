@@ -8,4 +8,7 @@ public interface IDialogService
 
     /// <summary>Shows the export dialog modally and returns when it closes.</summary>
     Task ShowExportAsync(ViewModels.ExportViewModel viewModel);
+
+    /// <summary>Shows the preferences window modally and returns when it closes.</summary>
+    Task ShowPreferencesAsync(ViewModels.PreferencesViewModel viewModel);
 }

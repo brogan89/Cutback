@@ -18,9 +18,28 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
         Closing += OnClosing;
+        ShowShortcutHints();
     }
 
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
+
+    /// <summary>
+    /// Menu shortcut labels. InputGesture is display-only (the bindings live in Window.KeyBindings)
+    /// and the modifier name differs per OS, so it is set here rather than in XAML.
+    /// </summary>
+    private void ShowShortcutHints()
+    {
+        var mod = OperatingSystem.IsMacOS() ? "Cmd" : "Ctrl";
+        NewProjectMenuItem.InputGesture = KeyGesture.Parse($"{mod}+N");
+        OpenVideoMenuItem.InputGesture = KeyGesture.Parse($"{mod}+O");
+        OpenProjectMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Shift+O");
+        SaveMenuItem.InputGesture = KeyGesture.Parse($"{mod}+S");
+        SaveAsMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Shift+S");
+        ExportMenuItem.InputGesture = KeyGesture.Parse($"{mod}+E");
+        // Preferences (Cmd+, / Ctrl+,) gets no label: Avalonia renders the key as "OemComma".
+        UndoMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Z");
+        RedoMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Shift+Z");
+    }
 
     /// <summary>Unsaved changes get a Save / Don't Save / Cancel prompt before the window closes.</summary>
     private async void OnClosing(object? sender, WindowClosingEventArgs e)

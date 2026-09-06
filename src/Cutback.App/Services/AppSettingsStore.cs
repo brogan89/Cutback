@@ -37,8 +37,16 @@ public sealed class AppSettingsStore
             Current = new AppSettings();
         }
 
+        Current = Sanitize(Current);
         return Current;
     }
+
+    /// <summary>A hand-edited file must not produce values the UI cannot represent.</summary>
+    private static AppSettings Sanitize(AppSettings settings) => settings with
+    {
+        UndoHistoryLimit = Math.Clamp(settings.UndoHistoryLimit, AppSettings.MinUndoHistoryLimit, AppSettings.MaxUndoHistoryLimit),
+        RecentFiles = settings.RecentFiles ?? [],
+    };
 
     public void Update(Func<AppSettings, AppSettings> change)
     {

@@ -149,12 +149,38 @@ this. Assert it at the end of every mutating operation in Debug. Unit tests cove
 `origin` is `auto | manual | claude` and exists so the UI can show why a cut was made and so a
 re-analysis can replace `auto` cuts without touching the user's `manual` ones. **Re-running detection
 must never discard manual edits.** What counts as a manual edit: **`Toggle` marks the segment manual;
-`MoveBoundary` marks only disabled neighbours manual; `Split` marks nothing** (it inherits origin).
+`MoveBoundary` marks only disabled neighbours manual; `Split` marks nothing** (it inherits origin);
+**`SetRange` (drag to draw a section) marks the new section manual; `Dissolve` (delete a region) marks
+nothing** — the region ceases to exist and its neighbours grow over it, keeping their own origins.
 A split is not a decision about either half, and locking kept regions would stop re-detection from
 finding new silences inside them. `ReplaceAutoSegments` preserves every non-`auto` segment exactly and
 clips new cuts around them.
 
 `sha256` is used to warn the user when the source file has changed or moved. It does not block opening.
+
+### Undo
+
+Undo is snapshot-based. `EditHistory<T>` in Core holds `Segment[]` snapshots taken *before* each edit;
+a snapshot is an array of references to immutable records, so even 1000 steps cost a few MB.
+`SegmentList.Restore` applies one. The view model pushes a snapshot only when an edit actually
+changed the partition, and **one boundary drag is one step**: `BoundaryMove` carries a
+`BoundaryDragPhase` (Begin/Update/End) so the snapshot is taken at Begin and recorded at End.
+`Toggle`, `SetRange`, `Dissolve` and `ReplaceAutoSegments` (detect silence) are one step each. Detection settings
+are not part of history. History clears when a project opens or closes; undo/redo mark the project
+dirty like any other edit. The limit is `AppSettings.UndoHistoryLimit` (default 100, range 10–1000),
+edited in File → Preferences.
+
+### Timeline gestures
+
+Click a segment: toggle. Right-click a segment: context menu; **Delete** dissolves the region into its
+neighbours (the `MenuFlyout` is built in `TimelineControl`'s constructor, so add items there). The
+**Delete / Backspace keys** do the same to the region under the pointer, via the `HoveredSegment`
+property the control pushes to the view model. Drag a boundary: move it (snapped to the quietest nearby
+sample on release).
+**Plain drag in the body: draw a new section**, which on release takes the *opposite* state of the
+segment under the press point (drag over kept footage to cut it, drag inside a cut to restore part
+of it). **Shift+drag: pan.** Wheel: zoom about the cursor; Shift+wheel or horizontal wheel: pan.
+Ruler: scrub.
 
 ---
 
@@ -266,11 +292,17 @@ These will cost you hours if you don't know them:
 - No `async void` except event handlers.
 - Temp files go in a per-session directory under the OS temp path and are cleaned up on exit.
 - Errors surface to the user as readable messages. No swallowed exceptions, no bare `catch {}`.
+- `AppSettings` properties use `set`, not `init`. The System.Text.Json **source generator ignores
+  property initializers on init-only properties**, so a key missing from an older `settings.json`
+  deserialises to 0/null. `AppSettingsStore.Load` also clamps and null-guards what it reads.
+- Menu shortcut labels (`MenuItem.InputGesture`) are display-only and set in `MainWindow.axaml.cs`
+  so the modifier reads Cmd on macOS and Ctrl elsewhere; the real bindings are `Window.KeyBindings`,
+  registered for both `Cmd+` and `Ctrl+`.
 
 ## Testing
 
-Unit tests cover `Cutback.Core` (the partition invariant, detection planning, project round-trip
-serialisation, version migration, source hashing) and the ffmpeg-independent parts of `Cutback.Media`
+Unit tests cover `Cutback.Core` (the partition invariant including `SetRange`, `Dissolve` and `Restore`,
+`EditHistory`, detection planning, project round-trip serialisation, version migration, source hashing) and the ffmpeg-independent parts of `Cutback.Media`
 (`FfmpegLocator` resolution order, `PeakReducer`, waveform levels and snapping, the silencedetect and
 `-progress` parsers, `FfmpegCapabilities` version parsing, `KeyframeSnapper`, and `FilterGraphBuilder`
 output asserted against expected filter strings). **Never shell out to ffmpeg in tests.** Do not attempt

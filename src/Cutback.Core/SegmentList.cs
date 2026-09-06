@@ -119,6 +119,137 @@ public sealed class SegmentList
             throw new ArgumentOutOfRangeException(nameof(time), time, $"Split time must be within [0, {Duration}].");
         }
 
+        if (!SplitAt(time))
+        {
+            return false;
+        }
+
+        OnChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// Sets the state of the time range <c>[start, end]</c>, creating boundaries at both ends when
+    /// they do not already exist and collapsing everything in between into one segment. That
+    /// segment is <see cref="SegmentOrigin.Manual"/>: carving out a range by hand is a decision
+    /// about that range. It keeps the id of the first segment it covered and has no reason. The
+    /// neighbours outside the range are left alone even when they share the new state, so the
+    /// section the user just drew stays a distinct region on the timeline.
+    /// </summary>
+    /// <param name="start">Start in seconds; clamped to <c>[0, Duration]</c>.</param>
+    /// <param name="end">End in seconds; clamped to <c>[0, Duration]</c>.</param>
+    /// <param name="enabled">Whether the range is kept.</param>
+    /// <returns>The index of the resulting segment, or -1 if the range was shorter than <see cref="MinSegmentLength"/> and nothing changed.</returns>
+    public int SetRange(double start, double end, bool enabled)
+    {
+        if (!double.IsFinite(start) || !double.IsFinite(end))
+        {
+            throw new ArgumentOutOfRangeException(nameof(start), "Range bounds must be finite.");
+        }
+
+        start = Math.Clamp(start, 0, Duration);
+        end = Math.Clamp(end, 0, Duration);
+        if (end - start < MinSegmentLength)
+        {
+            return -1;
+        }
+
+        SplitAt(start);
+        SplitAt(end);
+
+        var first = IndexAt(start);
+        var last = first;
+        while (_segments[last].End < end)
+        {
+            last++;
+        }
+
+        var section = _segments[first] with
+        {
+            Start = start,
+            End = end,
+            Enabled = enabled,
+            Origin = SegmentOrigin.Manual,
+            Reason = null,
+        };
+        _segments.RemoveRange(first, last - first + 1);
+        _segments.Insert(first, section);
+
+        OnChanged();
+        return first;
+    }
+
+    /// <summary>
+    /// Removes the segment at <paramref name="index"/> as a distinct region by letting its
+    /// neighbours grow over it. If both neighbours share an enabled state the three become one
+    /// segment (the left neighbour's id, its reason or else the right one's, and the merged
+    /// origin). Otherwise the region joins its left neighbour, or its only neighbour at either
+    /// end of the timeline. Nothing is marked manual: the region simply ceases to exist, and the
+    /// footage it covered is whatever surrounds it.
+    /// </summary>
+    /// <returns>False if this is the only segment, in which case nothing changes.</returns>
+    public bool Dissolve(int index)
+    {
+        if (index < 0 || index >= _segments.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"Segment index must be within 0..{_segments.Count - 1}.");
+        }
+
+        if (_segments.Count < 2)
+        {
+            return false;
+        }
+
+        var target = _segments[index];
+        var hasLeft = index > 0;
+        var hasRight = index < _segments.Count - 1;
+
+        if (hasLeft && hasRight && _segments[index - 1].Enabled == _segments[index + 1].Enabled)
+        {
+            var left = _segments[index - 1];
+            var right = _segments[index + 1];
+            _segments[index - 1] = left with
+            {
+                End = right.End,
+                Origin = MergeOrigin(left.Origin, right.Origin),
+                Reason = left.Reason ?? right.Reason,
+            };
+            _segments.RemoveRange(index, 2);
+        }
+        else if (hasLeft)
+        {
+            _segments[index - 1] = _segments[index - 1] with { End = target.End };
+            _segments.RemoveAt(index);
+        }
+        else
+        {
+            _segments[index + 1] = _segments[index + 1] with { Start = target.Start };
+            _segments.RemoveAt(index);
+        }
+
+        OnChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// Replaces the whole partition, e.g. from an undo snapshot. <paramref name="segments"/> must
+    /// already be in timeline order.
+    /// </summary>
+    /// <exception cref="InvalidPartitionException">The segments do not partition <c>[0, Duration]</c>. The list is left unchanged.</exception>
+    public void Restore(IReadOnlyList<Segment> segments)
+    {
+        ArgumentNullException.ThrowIfNull(segments);
+        ValidatePartition(segments, Duration);
+
+        _segments.Clear();
+        _segments.AddRange(segments);
+
+        OnChanged();
+    }
+
+    /// <summary>Splits at <paramref name="time"/> without raising <see cref="Changed"/>. False if already a boundary.</summary>
+    private bool SplitAt(double time)
+    {
         var index = IndexAt(time);
         var target = _segments[index];
         if (time == target.Start || time == target.End)
@@ -126,12 +257,8 @@ public sealed class SegmentList
             return false;
         }
 
-        var left = target with { End = time };
-        var right = target with { Id = Segment.NewId(), Start = time };
-        _segments[index] = left;
-        _segments.Insert(index + 1, right);
-
-        OnChanged();
+        _segments[index] = target with { End = time };
+        _segments.Insert(index + 1, target with { Id = Segment.NewId(), Start = time });
         return true;
     }
 

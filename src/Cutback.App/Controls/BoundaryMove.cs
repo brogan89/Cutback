@@ -1,6 +1,20 @@
 namespace Cutback.App.Controls;
 
-/// <summary>Command parameter for a boundary drag: which boundary and where it should go.</summary>
-/// <param name="BoundaryIndex">Index into the segment list's boundaries, 1..Count-1. See <c>SegmentList.MoveBoundary</c>.</param>
-/// <param name="Time">Requested time in seconds, already snapped.</param>
-public sealed record BoundaryMove(int BoundaryIndex, double Time);
+/// <summary>Where a boundary drag is in its life. One drag is one undo step, so the view model needs to know when it starts and ends.</summary>
+public enum BoundaryDragPhase
+{
+    /// <summary>The pointer went down on the boundary. <see cref="BoundaryMove.Time"/> is its current position.</summary>
+    Begin,
+
+    /// <summary>The pointer moved. Applied live, unsnapped.</summary>
+    Update,
+
+    /// <summary>The pointer was released or the drag was interrupted. Snapped when released.</summary>
+    End,
+}
+
+/// <summary>Parameter of the timeline's move-boundary command.</summary>
+/// <param name="BoundaryIndex">Boundary between <c>Segments[BoundaryIndex - 1]</c> and <c>Segments[BoundaryIndex]</c>.</param>
+/// <param name="Time">Requested position in seconds.</param>
+/// <param name="Phase">Where in the drag this move sits.</param>
+public sealed record BoundaryMove(int BoundaryIndex, double Time, BoundaryDragPhase Phase);

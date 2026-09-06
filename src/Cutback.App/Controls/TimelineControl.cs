@@ -2,6 +2,7 @@ using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Rendering.SceneGraph;
@@ -20,9 +21,10 @@ namespace Cutback.App.Controls;
 /// Interactions:
 /// <list type="bullet">
 /// <item>Click or drag in the ruler: seek / scrub.</item>
-/// <item>Click a segment: toggle it.</item>
+/// <item>Click a segment: toggle it. Right-click: context menu (Delete dissolves the region into its neighbours).</item>
 /// <item>Drag a segment boundary: move it (snapped to the quietest nearby point on release).</item>
-/// <item>Drag in the body: pan. Mouse wheel: zoom about the cursor. Shift+wheel or horizontal wheel: pan.</item>
+/// <item>Drag in the body: draw a new section. On release it takes the opposite state of the segment under the press point.</item>
+/// <item>Shift+drag in the body: pan. Mouse wheel: zoom about the cursor. Shift+wheel or horizontal wheel: pan.</item>
 /// </list>
 /// Rendering is SkiaSharp through Avalonia's API lease, so it uses the SkiaSharp Avalonia ships.
 /// </remarks>
@@ -49,6 +51,16 @@ public sealed class TimelineControl : Control
     public static readonly StyledProperty<ICommand?> MoveBoundaryCommandProperty =
         AvaloniaProperty.Register<TimelineControl, ICommand?>(nameof(MoveBoundaryCommand));
 
+    public static readonly StyledProperty<ICommand?> CreateSectionCommandProperty =
+        AvaloniaProperty.Register<TimelineControl, ICommand?>(nameof(CreateSectionCommand));
+
+    public static readonly StyledProperty<ICommand?> DeleteSegmentCommandProperty =
+        AvaloniaProperty.Register<TimelineControl, ICommand?>(nameof(DeleteSegmentCommand));
+
+    /// <summary>Index of the segment under the pointer, or -1. Pushed to the view model so keyboard shortcuts can target it.</summary>
+    public static readonly StyledProperty<int> HoveredSegmentProperty =
+        AvaloniaProperty.Register<TimelineControl, int>(nameof(HoveredSegment), -1, defaultBindingMode: Avalonia.Data.BindingMode.OneWayToSource);
+
     private const double RulerHeight = 22;
     private const double BoundaryHitHalfWidth = 5;
     private const double DragThreshold = 4;
@@ -65,14 +77,20 @@ public sealed class TimelineControl : Control
         Scrub,
         Pan,
         Boundary,
+        Section,
     }
 
     private Gesture _gesture;
     private Point _pressPoint;
     private double _panStartViewStart;
     private int _dragBoundaryIndex = -1;
+    private double _sectionAnchor;
+    private double _sectionCurrent;
     private int _hoverSegment = -1;
     private int _hoverBoundary = -1;
+    private Point? _lastPointer;
+    private int _contextSegment = -1;
+    private readonly MenuItem _deleteItem;
     private SegmentList? _subscribed;
 
     static TimelineControl()
@@ -85,6 +103,17 @@ public sealed class TimelineControl : Control
     {
         ClipToBounds = true;
         Cursor = new Cursor(StandardCursorType.Arrow);
+
+        // Built in code rather than XAML so the target segment can be resolved from the pointer
+        // position when the menu is requested. Add further items here.
+        _deleteItem = new MenuItem { Header = "Delete" };
+        _deleteItem.Click += (_, _) => DeleteSegment(_contextSegment);
+        ContextFlyout = new MenuFlyout { Items = { _deleteItem } };
+
+        // Tunnel, not bubble: Control shows ContextFlyout from a bubbling class handler, which runs
+        // before any bubbling instance handler, so only a tunnelling handler can veto or prepare
+        // the menu in time.
+        AddHandler(ContextRequestedEvent, OnContextRequested, RoutingStrategies.Tunnel);
     }
 
     public SegmentList? Segments
@@ -132,6 +161,26 @@ public sealed class TimelineControl : Control
         set => SetValue(MoveBoundaryCommandProperty, value);
     }
 
+    /// <summary>Parameter: <see cref="SectionRange"/>.</summary>
+    public ICommand? CreateSectionCommand
+    {
+        get => GetValue(CreateSectionCommandProperty);
+        set => SetValue(CreateSectionCommandProperty, value);
+    }
+
+    /// <summary>Parameter: <see cref="int"/> segment index. Dissolves the region into its neighbours.</summary>
+    public ICommand? DeleteSegmentCommand
+    {
+        get => GetValue(DeleteSegmentCommandProperty);
+        set => SetValue(DeleteSegmentCommandProperty, value);
+    }
+
+    public int HoveredSegment
+    {
+        get => GetValue(HoveredSegmentProperty);
+        set => SetValue(HoveredSegmentProperty, value);
+    }
+
     // ---- property changes ---------------------------------------------------------------------
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -165,7 +214,38 @@ public sealed class TimelineControl : Control
         }
     }
 
-    private void OnSegmentsChanged(object? sender, EventArgs e) => InvalidateVisual();
+    private void OnSegmentsChanged(object? sender, EventArgs e)
+    {
+        // Indices shift when segments merge or split; keep the hover target honest without waiting
+        // for the next pointer move, or a second Delete could hit the wrong region.
+        if (_gesture == Gesture.None && _lastPointer is { } p)
+        {
+            UpdateHover(p);
+        }
+
+        InvalidateVisual();
+    }
+
+    private void UpdateHover(Point p)
+    {
+        var boundary = BoundaryAt(p);
+        var segment = boundary >= 0 ? -1 : SegmentAt(p);
+        SetHover(boundary, segment);
+    }
+
+    private void SetHover(int boundary, int segment)
+    {
+        if (boundary == _hoverBoundary && segment == _hoverSegment)
+        {
+            return;
+        }
+
+        _hoverBoundary = boundary;
+        _hoverSegment = segment;
+        SetCurrentValue(HoveredSegmentProperty, segment);
+        Cursor = new Cursor(boundary >= 0 ? StandardCursorType.SizeWestEast : StandardCursorType.Arrow);
+        InvalidateVisual();
+    }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
@@ -186,6 +266,8 @@ public sealed class TimelineControl : Control
     private double XToTime(double x) => _viewStart + x / Bounds.Width * ViewSpan;
 
     private double SecondsPerPixel => Bounds.Width > 0 ? ViewSpan / Bounds.Width : 0;
+
+    private double ClampTime(double t) => Math.Clamp(t, 0, Duration);
 
     private void SetView(double start, double span)
     {
@@ -273,10 +355,11 @@ public sealed class TimelineControl : Control
         }
 
         var boundary = BoundaryAt(_pressPoint);
-        if (boundary >= 0)
+        if (boundary >= 0 && Segments is { } segments)
         {
             _gesture = Gesture.Boundary;
             _dragBoundaryIndex = boundary;
+            MoveBoundary(boundary, segments.Segments[boundary].Start, snap: false, BoundaryDragPhase.Begin);
             return;
         }
 
@@ -289,6 +372,7 @@ public sealed class TimelineControl : Control
     {
         base.OnPointerMoved(e);
         var p = e.GetPosition(this);
+        _lastPointer = p;
 
         switch (_gesture)
         {
@@ -297,16 +381,32 @@ public sealed class TimelineControl : Control
                 return;
 
             case Gesture.Boundary:
-                MoveBoundary(_dragBoundaryIndex, XToTime(p.X), snap: false);
+                MoveBoundary(_dragBoundaryIndex, XToTime(p.X), snap: false, BoundaryDragPhase.Update);
                 return;
 
             case Gesture.Pending:
                 if (Math.Abs(p.X - _pressPoint.X) > DragThreshold)
                 {
-                    _gesture = Gesture.Pan;
-                    Cursor = new Cursor(StandardCursorType.SizeAll);
+                    if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                    {
+                        _gesture = Gesture.Pan;
+                        Cursor = new Cursor(StandardCursorType.SizeAll);
+                    }
+                    else
+                    {
+                        _gesture = Gesture.Section;
+                        _sectionAnchor = ClampTime(XToTime(_pressPoint.X));
+                        _sectionCurrent = ClampTime(XToTime(p.X));
+                        Cursor = new Cursor(StandardCursorType.Cross);
+                        InvalidateVisual();
+                    }
                 }
 
+                return;
+
+            case Gesture.Section:
+                _sectionCurrent = ClampTime(XToTime(p.X));
+                InvalidateVisual();
                 return;
 
             case Gesture.Pan:
@@ -316,15 +416,7 @@ public sealed class TimelineControl : Control
         }
 
         // Idle hover feedback.
-        var boundary = BoundaryAt(p);
-        var segment = boundary >= 0 ? -1 : SegmentAt(p);
-        if (boundary != _hoverBoundary || segment != _hoverSegment)
-        {
-            _hoverBoundary = boundary;
-            _hoverSegment = segment;
-            Cursor = new Cursor(boundary >= 0 ? StandardCursorType.SizeWestEast : StandardCursorType.Arrow);
-            InvalidateVisual();
-        }
+        UpdateHover(p);
     }
 
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
@@ -344,7 +436,12 @@ public sealed class TimelineControl : Control
                 break;
 
             case Gesture.Boundary:
-                MoveBoundary(_dragBoundaryIndex, XToTime(p.X), snap: true);
+                MoveBoundary(_dragBoundaryIndex, XToTime(p.X), snap: true, BoundaryDragPhase.End);
+                break;
+
+            case Gesture.Section:
+                _sectionCurrent = ClampTime(XToTime(p.X));
+                CommitSection();
                 break;
         }
 
@@ -355,15 +452,51 @@ public sealed class TimelineControl : Control
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// The drag was interrupted: the window lost focus or another control took the pointer. A
+    /// boundary drag is closed where it stands so its undo step is still recorded; a half-drawn
+    /// section is dropped.
+    /// </summary>
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        if (_gesture == Gesture.None)
+        {
+            return;
+        }
+
+        if (_gesture == Gesture.Boundary && Segments is { } segments && _dragBoundaryIndex >= 1 && _dragBoundaryIndex < segments.Count)
+        {
+            MoveBoundary(_dragBoundaryIndex, segments.Segments[_dragBoundaryIndex].Start, snap: false, BoundaryDragPhase.End);
+        }
+
+        _gesture = Gesture.None;
+        _dragBoundaryIndex = -1;
+        Cursor = new Cursor(StandardCursorType.Arrow);
+        InvalidateVisual();
+    }
+
     protected override void OnPointerExited(PointerEventArgs e)
     {
         base.OnPointerExited(e);
-        if (_gesture == Gesture.None && (_hoverSegment != -1 || _hoverBoundary != -1))
+        _lastPointer = null;
+        if (_gesture == Gesture.None)
         {
-            _hoverSegment = -1;
-            _hoverBoundary = -1;
-            InvalidateVisual();
+            SetHover(-1, -1);
         }
+    }
+
+    /// <summary>Right-click: resolve the region under the pointer for the context menu, or suppress the menu.</summary>
+    private void OnContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        _contextSegment = _gesture == Gesture.None && e.TryGetPosition(this, out var p) ? SegmentAt(p) : -1;
+        if (_contextSegment < 0)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        _deleteItem.IsEnabled = DeleteSegmentCommand?.CanExecute(_contextSegment) == true;
     }
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -404,7 +537,7 @@ public sealed class TimelineControl : Control
         }
     }
 
-    private void MoveBoundary(int boundaryIndex, double time, bool snap)
+    private void MoveBoundary(int boundaryIndex, double time, bool snap, BoundaryDragPhase phase)
     {
         if (boundaryIndex < 0)
         {
@@ -416,10 +549,43 @@ public sealed class TimelineControl : Control
             time = waveform.SnapToZeroCrossing(time, SnapWindowSeconds);
         }
 
-        var move = new BoundaryMove(boundaryIndex, Math.Clamp(time, 0, Duration));
+        var move = new BoundaryMove(boundaryIndex, ClampTime(time), phase);
         if (MoveBoundaryCommand?.CanExecute(move) == true)
         {
             MoveBoundaryCommand.Execute(move);
+        }
+    }
+
+    private void DeleteSegment(int index)
+    {
+        if (index >= 0 && DeleteSegmentCommand?.CanExecute(index) == true)
+        {
+            DeleteSegmentCommand.Execute(index);
+        }
+    }
+
+    /// <summary>Turns the drawn range into a section. Both ends snap to the quietest nearby point like a boundary does.</summary>
+    private void CommitSection()
+    {
+        var start = Math.Min(_sectionAnchor, _sectionCurrent);
+        var end = Math.Max(_sectionAnchor, _sectionCurrent);
+        if (Waveform is { } waveform)
+        {
+            start = waveform.SnapToZeroCrossing(start, SnapWindowSeconds);
+            end = waveform.SnapToZeroCrossing(end, SnapWindowSeconds);
+        }
+
+        start = ClampTime(start);
+        end = ClampTime(end);
+        if (end <= start)
+        {
+            return;
+        }
+
+        var range = new SectionRange(start, end, _sectionAnchor);
+        if (CreateSectionCommand?.CanExecute(range) == true)
+        {
+            CreateSectionCommand.Execute(range);
         }
     }
 
@@ -437,9 +603,14 @@ public sealed class TimelineControl : Control
             _viewStart,
             _viewEnd,
             _hoverSegment,
-            _gesture == Gesture.Boundary ? _dragBoundaryIndex : _hoverBoundary);
+            _gesture == Gesture.Boundary ? _dragBoundaryIndex : _hoverBoundary,
+            _gesture == Gesture.Section
+                ? new TimeRange(Math.Min(_sectionAnchor, _sectionCurrent), Math.Max(_sectionAnchor, _sectionCurrent))
+                : null);
         context.Custom(new DrawOperation(new Rect(Bounds.Size), snapshot));
     }
+
+    private readonly record struct TimeRange(double Start, double End);
 
     private sealed record Snapshot(
         Size Size,
@@ -450,7 +621,8 @@ public sealed class TimelineControl : Control
         double ViewStart,
         double ViewEnd,
         int HoverSegment,
-        int ActiveBoundary);
+        int ActiveBoundary,
+        TimeRange? PendingSection);
 
     private sealed class DrawOperation : ICustomDrawOperation
     {
@@ -464,6 +636,7 @@ public sealed class TimelineControl : Control
         private static readonly SKColor RemovedWave = new(0x4A, 0x4A, 0x52);
         private static readonly SKColor Boundary = new(0xC8, 0xC8, 0xD2, 0xB0);
         private static readonly SKColor BoundaryActive = new(0xFF, 0xD1, 0x66);
+        private static readonly SKColor SectionFill = new(0xFF, 0xD1, 0x66, 0x38);
         private static readonly SKColor Playhead = new(0xFF, 0x5A, 0x5A);
         private static readonly SKColor Tick = new(0x55, 0x55, 0x5E);
         private static readonly SKColor Label = new(0xA0, 0xA0, 0xAA);
@@ -520,6 +693,7 @@ public sealed class TimelineControl : Control
             DrawSegments(canvas, paint, w, bodyTop, h);
             DrawWaveform(canvas, paint, w, bodyTop, h);
             DrawBoundaries(canvas, paint, bodyTop, h);
+            DrawPendingSection(canvas, paint, bodyTop, h);
             DrawRuler(canvas, paint, w, bodyTop);
             DrawPlayhead(canvas, paint, h);
         }
@@ -648,6 +822,26 @@ public sealed class TimelineControl : Control
                 paint.StrokeWidth = active ? 2 : 1;
                 canvas.DrawLine(x, top, x, bottom, paint);
             }
+        }
+
+        /// <summary>The section being dragged out, before it is committed.</summary>
+        private void DrawPendingSection(SKCanvas canvas, SKPaint paint, float top, float bottom)
+        {
+            if (_s.PendingSection is not { } section)
+            {
+                return;
+            }
+
+            var x0 = TimeToX(section.Start);
+            var x1 = TimeToX(section.End);
+            paint.IsAntialias = false;
+            paint.Color = SectionFill;
+            canvas.DrawRect(x0, top, x1 - x0, bottom - top, paint);
+
+            paint.Color = BoundaryActive;
+            paint.StrokeWidth = 1;
+            canvas.DrawLine((float)Math.Round(x0) + 0.5f, top, (float)Math.Round(x0) + 0.5f, bottom, paint);
+            canvas.DrawLine((float)Math.Round(x1) + 0.5f, top, (float)Math.Round(x1) + 0.5f, bottom, paint);
         }
 
         private void DrawRuler(SKCanvas canvas, SKPaint paint, float w, float bodyTop)

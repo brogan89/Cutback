@@ -26,6 +26,15 @@
     <KeyBinding Gesture="Ctrl+N" Command="{Binding NewProjectCommand}" />
     <KeyBinding Gesture="Cmd+E" Command="{Binding ExportCommand}" />
     <KeyBinding Gesture="Ctrl+E" Command="{Binding ExportCommand}" />
+    <KeyBinding Gesture="Cmd+OemComma" Command="{Binding ShowPreferencesCommand}" />
+    <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding ShowPreferencesCommand}" />
+    <KeyBinding Gesture="Cmd+Z" Command="{Binding UndoCommand}" />
+    <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoCommand}" />
+    <KeyBinding Gesture="Cmd+Shift+Z" Command="{Binding RedoCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+Z" Command="{Binding RedoCommand}" />
+    <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoCommand}" />
+    <KeyBinding Gesture="Delete" Command="{Binding DeleteHoveredSegmentCommand}" />
+    <KeyBinding Gesture="Back" Command="{Binding DeleteHoveredSegmentCommand}" />
   </Window.KeyBindings>
 
   <Window.Styles>
@@ -42,10 +51,11 @@
 
     <!-- Menu -->
     <Menu Grid.Row="0" Background="#1B1B1F">
+      <!-- Shortcut hints (InputGesture) are set in code-behind so the modifier matches the OS. -->
       <MenuItem Header="_File">
-        <MenuItem Header="_New Project" Command="{Binding NewProjectCommand}" />
-        <MenuItem Header="_Open Video…" Command="{Binding OpenVideoCommand}" />
-        <MenuItem Header="Open _Project…" Command="{Binding OpenProjectCommand}" />
+        <MenuItem x:Name="NewProjectMenuItem" Header="_New Project" Command="{Binding NewProjectCommand}" />
+        <MenuItem x:Name="OpenVideoMenuItem" Header="_Open Video…" Command="{Binding OpenVideoCommand}" />
+        <MenuItem x:Name="OpenProjectMenuItem" Header="Open _Project…" Command="{Binding OpenProjectCommand}" />
         <MenuItem Header="Open _Recent" ItemsSource="{Binding RecentFiles}" IsEnabled="{Binding RecentFiles.Count}">
           <MenuItem.ItemContainerTheme>
             <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="vm:RecentFileItem">
@@ -57,10 +67,16 @@
           </MenuItem.ItemContainerTheme>
         </MenuItem>
         <Separator />
-        <MenuItem Header="_Save" Command="{Binding SaveProjectCommand}" />
-        <MenuItem Header="Save _As…" Command="{Binding SaveProjectAsCommand}" />
+        <MenuItem x:Name="SaveMenuItem" Header="_Save" Command="{Binding SaveProjectCommand}" />
+        <MenuItem x:Name="SaveAsMenuItem" Header="Save _As…" Command="{Binding SaveProjectAsCommand}" />
         <Separator />
-        <MenuItem Header="_Export…" Command="{Binding ExportCommand}" />
+        <MenuItem x:Name="ExportMenuItem" Header="_Export…" Command="{Binding ExportCommand}" />
+        <Separator />
+        <MenuItem Header="_Preferences…" Command="{Binding ShowPreferencesCommand}" />
+      </MenuItem>
+      <MenuItem Header="_Edit">
+        <MenuItem x:Name="UndoMenuItem" Header="_Undo" Command="{Binding UndoCommand}" />
+        <MenuItem x:Name="RedoMenuItem" Header="_Redo" Command="{Binding RedoCommand}" />
       </MenuItem>
     </Menu>
 
@@ -169,7 +185,10 @@
                                 Position="{Binding PositionSeconds}"
                                 SeekCommand="{Binding SeekCommand}"
                                 ToggleSegmentCommand="{Binding ToggleSegmentCommand}"
-                                MoveBoundaryCommand="{Binding MoveBoundaryCommand}" />
+                                MoveBoundaryCommand="{Binding MoveBoundaryCommand}"
+                                CreateSectionCommand="{Binding CreateSectionCommand}"
+                                DeleteSegmentCommand="{Binding DeleteSegmentCommand}"
+                                HoveredSegment="{Binding HoveredSegmentIndex, Mode=OneWayToSource}" />
     </Border>
 
     <!-- Status / progress -->

@@ -19,6 +19,12 @@ public sealed class AvaloniaDialogService : IDialogService
         return dialog.ShowDialog(_owner);
     }
 
+    public Task ShowPreferencesAsync(ViewModels.PreferencesViewModel viewModel)
+    {
+        var window = new PreferencesWindow { DataContext = viewModel };
+        return window.ShowDialog(_owner);
+    }
+
     public async Task<SaveChoice> ConfirmSaveChangesAsync(string projectName)
     {
         var dialog = new SaveChangesDialog(projectName);

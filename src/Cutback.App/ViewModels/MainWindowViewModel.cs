@@ -19,6 +19,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IDialogService _dialogs;
     private readonly AppSettingsStore _settings;
     private readonly TempSession _temp;
+    private readonly EditHistory<Segment[]> _history;
+    private Segment[]? _dragSnapshot;
     private FfmpegLocation? _ffmpeg;
     private CancellationTokenSource? _openCts;
     private bool _loadingSettings;
@@ -37,6 +39,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _dialogs = dialogs;
         _settings = settings;
         _temp = temp;
+
+        _history = new EditHistory<Segment[]>(settings.Current.UndoHistoryLimit);
+        _history.Changed += (_, _) =>
+        {
+            UndoCommand.NotifyCanExecuteChanged();
+            RedoCommand.NotifyCanExecuteChanged();
+        };
 
         _player.PositionChanged += (_, seconds) => OnPlayerPosition(seconds);
         _player.PlaybackStateChanged += (_, _) => IsPlaying = _player.IsPlaying;
@@ -63,6 +72,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>The live, editable partition. Null until a project is open.</summary>
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(UndoCommand), nameof(RedoCommand))]
     public partial SegmentList? Segments { get; private set; }
 
     [ObservableProperty]
@@ -180,7 +190,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ---- busy ---------------------------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand))]
     public partial bool IsBusy { get; private set; }
 
     [ObservableProperty]
@@ -324,6 +334,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             Project = project;
             ProjectPath = path;
+            _history.Clear();
+            _dragSnapshot = null;
             Segments = new SegmentList(project.Source.DurationSeconds, project.Segments);
             Segments.Changed += (_, _) => MarkDirty();
             Waveform = waveform;
@@ -368,6 +380,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _player.Unload();
         Project = null;
         ProjectPath = null;
+        _history.Clear();
+        _dragSnapshot = null;
         Segments = null;
         Waveform = null;
         DurationSeconds = 0;
@@ -503,6 +517,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _player.Seek(Math.Clamp(seconds, 0, DurationSeconds));
     }
 
+    // ---- editing ------------------------------------------------------------------------------
+
+    /// <summary>Segment under the pointer on the timeline, or -1. Kept current by the timeline control.</summary>
+    [ObservableProperty]
+    public partial int HoveredSegmentIndex { get; set; } = -1;
+
+    /// <summary>Dissolves a region into its neighbours. Used by the timeline's context menu.</summary>
+    [RelayCommand]
+    private void DeleteSegment(int index)
+    {
+        if (Segments is null || index < 0 || index >= Segments.Count)
+        {
+            return;
+        }
+
+        Edit(s => s.Dissolve(index));
+    }
+
+    /// <summary>Delete / Backspace: acts on the region under the pointer.</summary>
+    [RelayCommand]
+    private void DeleteHoveredSegment() => DeleteSegment(HoveredSegmentIndex);
+
     [RelayCommand]
     private void ToggleSegment(int index)
     {
@@ -511,9 +547,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        Segments.Toggle(index);
+        Edit(s => s.Toggle(index));
     }
 
+    /// <summary>A whole drag is one undo step: the snapshot is taken at Begin and recorded at End.</summary>
     [RelayCommand]
     private void MoveBoundary(BoundaryMove move)
     {
@@ -522,7 +559,101 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        Segments.MoveBoundary(move.BoundaryIndex, move.Time);
+        switch (move.Phase)
+        {
+            case BoundaryDragPhase.Begin:
+                _dragSnapshot = Segments.Segments.ToArray();
+                break;
+
+            case BoundaryDragPhase.Update:
+                Segments.MoveBoundary(move.BoundaryIndex, move.Time);
+                break;
+
+            case BoundaryDragPhase.End:
+                Segments.MoveBoundary(move.BoundaryIndex, move.Time);
+                if (_dragSnapshot is { } before && !before.SequenceEqual(Segments.Segments))
+                {
+                    _history.Push(before);
+                }
+
+                _dragSnapshot = null;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// A range the user drew on the timeline becomes a section with the opposite state of the
+    /// segment where the drag started: drawing over kept footage cuts it, drawing inside a cut
+    /// restores that part.
+    /// </summary>
+    [RelayCommand]
+    private void CreateSection(SectionRange range)
+    {
+        if (Segments is null)
+        {
+            return;
+        }
+
+        var anchorIndex = Segments.IndexAt(range.Anchor);
+        if (anchorIndex < 0)
+        {
+            return;
+        }
+
+        var enabled = !Segments.Segments[anchorIndex].Enabled;
+        Edit(s => s.SetRange(range.Start, range.End, enabled));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUndo))]
+    private void Undo()
+    {
+        if (Segments is null || !_history.CanUndo)
+        {
+            return;
+        }
+
+        _dragSnapshot = null;
+        Segments.Restore(_history.Undo(Segments.Segments.ToArray()));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRedo))]
+    private void Redo()
+    {
+        if (Segments is null || !_history.CanRedo)
+        {
+            return;
+        }
+
+        _dragSnapshot = null;
+        Segments.Restore(_history.Redo(Segments.Segments.ToArray()));
+    }
+
+    private bool CanUndo => Segments is not null && !IsBusy && _history.CanUndo;
+
+    private bool CanRedo => Segments is not null && !IsBusy && _history.CanRedo;
+
+    /// <summary>Runs one edit as one undo step. Edits that change nothing leave no step behind.</summary>
+    private void Edit(Action<SegmentList> edit)
+    {
+        if (Segments is null)
+        {
+            return;
+        }
+
+        var before = Segments.Segments.ToArray();
+        edit(Segments);
+        if (!before.SequenceEqual(Segments.Segments))
+        {
+            _history.Push(before);
+        }
+    }
+
+    [RelayCommand]
+    private async Task ShowPreferencesAsync()
+    {
+        var preferences = new PreferencesViewModel(_settings);
+        await _dialogs.ShowPreferencesAsync(preferences);
+        _history.Limit = _settings.Current.UndoHistoryLimit;
     }
 
     /// <summary>
@@ -600,7 +731,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             var spans = await new SilenceDetector(ffmpeg).DetectAsync(Project.Source.Path, DurationSeconds, settings, progress, CancellationToken.None);
             var cuts = SilenceCutPlanner.Plan(spans, settings, DurationSeconds);
 
-            Segments.ReplaceAutoSegments(cuts);
+            Edit(s => s.ReplaceAutoSegments(cuts));
             Project = Project with { Settings = settings };
 
             var removed = cuts.Sum(c => c.Duration);

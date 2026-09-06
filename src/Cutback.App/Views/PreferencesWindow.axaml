@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Cutback.App.ViewModels"
+        x:Class="Cutback.App.Views.PreferencesWindow"
+        x:DataType="vm:PreferencesViewModel"
+        Title="Preferences"
+        Width="420" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#242429">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.dim">
+      <Setter Property="Foreground" Value="#9A9AA6" />
+    </Style>
+  </Window.Styles>
+
+  <StackPanel Margin="20" Spacing="16">
+
+    <StackPanel Spacing="6">
+      <TextBlock Text="Undo history" />
+      <!-- Bounds mirror AppSettings.MinUndoHistoryLimit / MaxUndoHistoryLimit. -->
+      <NumericUpDown Value="{Binding UndoHistoryLimit}" Minimum="10" Maximum="1000" Increment="10" FormatString="0" />
+      <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" Text="Number of edits you can undo. Lowering it drops the oldest steps." />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Command="{Binding CancelCommand}" MinWidth="90" IsCancel="True" />
+      <Button Content="OK" Command="{Binding SaveCommand}" MinWidth="90" IsDefault="True" Classes="accent" />
+    </StackPanel>
+
+  </StackPanel>
+</Window>
