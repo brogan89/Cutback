@@ -77,6 +77,8 @@
       <MenuItem Header="_Edit">
         <MenuItem x:Name="UndoMenuItem" Header="_Undo" Command="{Binding UndoCommand}" />
         <MenuItem x:Name="RedoMenuItem" Header="_Redo" Command="{Binding RedoCommand}" />
+        <Separator />
+        <MenuItem Header="_Transcribe" Command="{Binding TranscribeCommand}" />
       </MenuItem>
     </Menu>
 
@@ -193,13 +195,15 @@
 
     <!-- Status / progress -->
     <Border Grid.Row="6" Background="#242429" Padding="10,4" MinHeight="28">
-      <Grid ColumnDefinitions="Auto,*">
+      <Grid ColumnDefinitions="Auto,*,Auto">
         <TextBlock Grid.Column="0" Classes="dim" VerticalAlignment="Center" Text="{Binding BusyMessage}" IsVisible="{Binding IsBusy}" />
         <TextBlock Grid.Column="0" Classes="dim" VerticalAlignment="Center" Text="{Binding StatusMessage}" IsVisible="{Binding !IsBusy}" />
         <ProgressBar Grid.Column="1" Margin="12,0,0,0" Height="6" VerticalAlignment="Center"
                      IsVisible="{Binding IsBusy}"
                      IsIndeterminate="{Binding IsBusyIndeterminate}"
                      Minimum="0" Maximum="1" Value="{Binding BusyProgress}" />
+        <Button Grid.Column="2" Content="Cancel" Command="{Binding CancelBusyCommand}" IsVisible="{Binding CanCancelBusy}"
+                Margin="12,0,0,0" Padding="10,2" VerticalAlignment="Center" />
       </Grid>
     </Border>
 

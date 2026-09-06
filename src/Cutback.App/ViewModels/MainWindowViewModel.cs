@@ -9,6 +9,7 @@ using Cutback.Core;
 using Cutback.Core.Detection;
 using Cutback.Core.Models;
 using Cutback.Core.Projects;
+using Cutback.Core.Transcript;
 using Cutback.Media;
 
 namespace Cutback.App.ViewModels;
@@ -25,6 +26,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private Segment[]? _dragSnapshot;
     private FfmpegLocation? _ffmpeg;
     private CancellationTokenSource? _openCts;
+    private CancellationTokenSource? _busyCts;
     private bool _loadingSettings;
     private bool _skipping;
     private double? _skipTarget;
@@ -61,7 +63,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProject), nameof(Title), nameof(SourceFileName), nameof(ProjectName))]
-    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(TranscribeCommand))]
     public partial CutbackProject? Project { get; private set; }
 
     /// <summary>Where the project was last saved or loaded from. Null for an unsaved project.</summary>
@@ -166,6 +168,89 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         MarkDirty();
     }
 
+    // ---- transcript ---------------------------------------------------------------------------
+
+    /// <summary>Mirrors <c>Project.Transcript</c> for binding. Empty until the project is transcribed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTranscript))]
+    public partial IReadOnlyList<Word> Transcript { get; private set; } = [];
+
+    public bool HasTranscript => Transcript.Count > 0;
+
+    [ObservableProperty]
+    public partial bool IsTranscriptOpen { get; set; }
+
+    /// <summary>The source file changed after this transcript was made (the hash warning fired on open).</summary>
+    [ObservableProperty]
+    public partial bool IsTranscriptStale { get; private set; }
+
+    /// <summary>Word under the playhead, or -1. Highlighted in the transcript panel.</summary>
+    [ObservableProperty]
+    public partial int CurrentWordIndex { get; private set; } = -1;
+
+    [RelayCommand]
+    private void ToggleTranscript() => IsTranscriptOpen = !IsTranscriptOpen;
+
+    [RelayCommand(CanExecute = nameof(CanEdit))]
+    private async Task TranscribeAsync()
+    {
+        if (await TranscribeCoreAsync())
+        {
+            IsTranscriptOpen = true;
+        }
+    }
+
+    /// <summary>
+    /// Downloads the chosen model if needed, then transcribes the source. Both phases are
+    /// cancellable from the status bar. Returns true if a non-empty transcript is now loaded.
+    /// </summary>
+    private async Task<bool> TranscribeCoreAsync()
+    {
+        if (Project is null)
+        {
+            return false;
+        }
+
+        var model = WhisperModelInfo.Parse(_settings.Current.WhisperModel);
+        ErrorMessage = null;
+        BeginBusy(_models.IsDownloaded(model) ? "Transcribing…" : $"Downloading the {WhisperModelInfo.For(model).Key} speech model…", cancellable: true);
+        try
+        {
+            var ct = _busyCts!.Token;
+            var ffmpeg = ResolveFfmpeg();
+            var progress = new Progress<double>(p => BusyProgress = p);
+
+            var modelPath = await _models.EnsureAsync(model, progress, ct);
+            BusyMessage = "Transcribing…";
+            BusyProgress = 0;
+
+            ITranscriber transcriber = new WhisperTranscriber(ffmpeg, modelPath);
+            var words = await transcriber.TranscribeAsync(Project.Source.Path, progress, ct);
+
+            Project = Project with { Transcript = words };
+            Transcript = words;
+            IsTranscriptStale = false;
+            CurrentWordIndex = TranscriptView.IndexAtTime(words, PositionSeconds);
+            MarkDirty();
+            StatusMessage = words.Count == 0 ? "No speech was recognised." : $"Transcribed {words.Count} words.";
+            return words.Count > 0;
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = "Transcription cancelled.";
+            return false;
+        }
+        catch (Exception ex) when (ex is FfmpegNotFoundException or FfmpegException or ModelDownloadException or IOException)
+        {
+            ErrorMessage = ex.Message;
+            return false;
+        }
+        finally
+        {
+            EndBusy();
+        }
+    }
+
     // ---- messages -----------------------------------------------------------------------------
 
     /// <summary>Non-error feedback shown in the footer when nothing is running.</summary>
@@ -194,7 +279,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ---- busy ---------------------------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand), nameof(TranscribeCommand))]
     public partial bool IsBusy { get; private set; }
 
     [ObservableProperty]
@@ -206,6 +291,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public partial double BusyProgress { get; private set; } = double.NaN;
 
     public bool IsBusyIndeterminate => double.IsNaN(BusyProgress);
+
+    /// <summary>True while the running operation can be stopped from the status bar.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelBusyCommand))]
+    public partial bool CanCancelBusy { get; private set; }
+
+    [RelayCommand(CanExecute = nameof(CanCancelBusy))]
+    private void CancelBusy() => _busyCts?.Cancel();
 
     private bool NotBusy => !IsBusy;
 
@@ -342,6 +435,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _dragSnapshot = null;
             Segments = new SegmentList(project.Source.DurationSeconds, project.Segments);
             Segments.Changed += (_, _) => MarkDirty();
+            Transcript = project.Transcript;
+            IsTranscriptStale = warning is not null && project.Transcript.Count > 0;
+            CurrentWordIndex = -1;
             Waveform = waveform;
             DurationSeconds = project.Source.DurationSeconds;
             PositionSeconds = 0;
@@ -388,6 +484,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _dragSnapshot = null;
         Segments = null;
         Waveform = null;
+        Transcript = [];
+        IsTranscriptStale = false;
+        CurrentWordIndex = -1;
         DurationSeconds = 0;
         PositionSeconds = 0;
         IsDirty = false;
@@ -668,6 +767,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private void OnPlayerPosition(double seconds)
     {
         PositionSeconds = seconds;
+        CurrentWordIndex = TranscriptView.IndexAtTime(Transcript, seconds);
 
         // Seek raises PositionChanged synchronously, so this handler can be re-entered by its own
         // seek. Never act on a position while a skip is already in progress: an unguarded loop here
@@ -809,16 +909,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         return location;
     }
 
-    private void BeginBusy(string message)
+    private void BeginBusy(string message, bool cancellable = false)
     {
         BusyMessage = message;
         BusyProgress = double.NaN;
+        _busyCts = cancellable ? new CancellationTokenSource() : null;
+        CanCancelBusy = cancellable;
         IsBusy = true;
     }
 
     private void EndBusy()
     {
         IsBusy = false;
+        CanCancelBusy = false;
+        _busyCts?.Dispose();
+        _busyCts = null;
         BusyMessage = null;
         BusyProgress = double.NaN;
     }
