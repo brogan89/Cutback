@@ -4,7 +4,9 @@ namespace Cutback.Core.Transcript;
 
 /// <summary>
 /// Read-only questions the transcript panel asks about words against the current partition.
-/// A word is "cut" when its midpoint falls in a disabled segment: a cut that clips the very edge
+/// A word is "cut" when its alignment anchor (or, without one, its midpoint) falls in a disabled
+/// segment. The anchor is used because the heuristic span often misses a short word; the midpoint
+/// rule means a cut that clips the very edge
 /// of a word should not strike the whole word through.
 /// </summary>
 public static class TranscriptView
@@ -13,7 +15,8 @@ public static class TranscriptView
     {
         ArgumentNullException.ThrowIfNull(word);
         ArgumentNullException.ThrowIfNull(segments);
-        var index = SegmentIndexAt(segments, (word.Start + word.End) / 2);
+        // The alignment anchor is inside the spoken word when present; the heuristic span may not be.
+        var index = SegmentIndexAt(segments, word.Anchor ?? (word.Start + word.End) / 2);
         return index >= 0 && !segments[index].Enabled;
     }
 

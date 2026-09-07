@@ -135,6 +135,33 @@ public sealed class Waveform
         return Math.Min(duration, (best + 0.5) * spb);
     }
 
+    /// <summary>
+    /// Mean peak amplitude per <paramref name="bucketSeconds"/>, from the finest level: a coarse
+    /// loudness envelope good enough to tell speech from pauses. A short trailing bucket is
+    /// averaged over the peaks it has.
+    /// </summary>
+    public double[] Envelope(double bucketSeconds)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bucketSeconds);
+        var level = Levels[0];
+        var perBucket = Math.Max(1, (int)Math.Round(bucketSeconds / level.SecondsPerBucket));
+        var count = (level.Peaks.Count + perBucket - 1) / perBucket;
+        var envelope = new double[count];
+        for (var i = 0; i < count; i++)
+        {
+            var end = Math.Min(level.Peaks.Count, (i + 1) * perBucket);
+            var sum = 0.0;
+            for (var j = i * perBucket; j < end; j++)
+            {
+                sum += Amplitude(level.Peaks[j]);
+            }
+
+            envelope[i] = sum / (end - i * perBucket);
+        }
+
+        return envelope;
+    }
+
     private static int Amplitude(Peak p) => Math.Max(-(int)p.Min, (int)p.Max);
 
     /// <summary>

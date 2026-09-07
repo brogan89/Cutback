@@ -223,7 +223,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             BusyMessage = "Transcribing…";
             BusyProgress = double.NaN;
 
-            ITranscriber transcriber = new WhisperTranscriber(ffmpeg, modelPath);
+            ITranscriber transcriber = new WhisperTranscriber(ffmpeg, modelPath, model);
             var words = await transcriber.TranscribeAsync(Project.Source.Path, progress, ct);
 
             Project = Project with { Transcript = words };
@@ -921,18 +921,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         var fillers = FillerDetector.Find(Transcript, _settings.Current.FillerWords);
-        var spans = fillers.Select(w =>
+        var envelope = Waveform?.Envelope(EnvelopeBucketSeconds);
+        var threshold = envelope is null ? 0 : FillerSpanLocator.SpeechThreshold(envelope);
+        var located = 0;
+        var spans = new List<FillerSpan>(fillers.Count);
+        foreach (var w in fillers)
         {
-            var (start, end) = SnapWordSpan(w.Start, w.End);
-            return new FillerSpan(start, end, FillerDetector.Normalize(w.Text));
-        });
+            var (start, end) = LocateFillerSpan(w, envelope, threshold, ref located);
+            spans.Add(new FillerSpan(start, end, FillerDetector.Normalize(w.Text)));
+        }
+
         var cuts = FillerCutPlanner.Plan(spans, Segments.Segments, CurrentSettings, DurationSeconds);
 
         Edit(s => s.ApplyFillerCuts(cuts));
         IsTranscriptOpen = true;
 
         var removed = cuts.Sum(c => c.Duration);
-        var removedWords = fillers.Count(w => cuts.Any(c => c.Start < w.End && c.End > w.Start));
+        var removedWords = spans.Count(s => cuts.Any(c => c.Start < s.End && c.End > s.Start));
         StatusMessage = cuts.Count switch
         {
             0 when fillers.Count == 0 => "No filler words found.",
@@ -940,6 +945,43 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _ when removedWords == 1 => $"Removed 1 filler word, {TimeFormat.Clock(removed)} cut.",
             _ => $"Removed {removedWords} filler words, {TimeFormat.Clock(removed)} cut.",
         };
+        if (fillers.Count > 0 && located == 0)
+        {
+            StatusMessage += " Transcribe again for cuts aligned to the audio.";
+        }
+    }
+
+    /// <summary>Envelope resolution for locating fillers: fine enough to find a word boundary, coarse enough to ignore pitch periods.</summary>
+    private const double EnvelopeBucketSeconds = 0.010;
+
+    /// <summary>
+    /// Where a filler was actually spoken: the burst of speech around its alignment anchor when the
+    /// transcript has anchors, else Whisper's own span snapped to the waveform.
+    /// </summary>
+    private (double Start, double End) LocateFillerSpan(Word word, double[]? envelope, double threshold, ref int located)
+    {
+        if (envelope is not null)
+        {
+            var index = -1;
+            for (var i = 0; i < Transcript.Count; i++)
+            {
+                if (ReferenceEquals(Transcript[i], word))
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            var previous = index > 0 ? Transcript[index - 1] : null;
+            var next = index >= 0 && index + 1 < Transcript.Count ? Transcript[index + 1] : null;
+            if (FillerSpanLocator.Locate(envelope, EnvelopeBucketSeconds, threshold, previous, word, next) is var (start, end))
+            {
+                located++;
+                return (start, end);
+            }
+        }
+
+        return SnapWordSpan(word.Start, word.End);
     }
 
     /// <summary>Snaps both edges of a word to the quietest nearby waveform bucket, falling back to the raw edges if snapping would collapse the word.</summary>

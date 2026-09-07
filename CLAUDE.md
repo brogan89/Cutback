@@ -59,7 +59,7 @@ analyzers at `AnalysisLevel=latest` with code style enforced in build. All packa
 | Video playback | `LibVLCSharp`, `LibVLCSharp.Avalonia` | See LibVLCSharp gotchas below. |
 | VLC native | `VideoLAN.LibVLC.Windows` only | **No NuGet package for Linux** — requires system `libvlc`. **`VideoLAN.LibVLC.Mac` is unusable**: x86_64-only and ships no libvlccore or plugins. On macOS `LibVlcLocator` loads `/Applications/VLC.app` and must `setenv("VLC_PLUGIN_PATH")` via P/Invoke, because .NET's `Environment.SetEnvironmentVariable` does not reach native `getenv` on Unix. |
 | FFmpeg | `FFMpegCore` | Used for **ffprobe analysis only** (`MediaProbe`). Everything that streams stdout or parses stderr/progress (waveform, silencedetect, export, keyframe listing) goes through the small `FfmpegProcess` wrapper over `System.Diagnostics.Process`, which is simpler and identical on every platform. Do not switch to `FFmpeg.AutoGen`; the raw P/Invoke bindings are not worth the pain here. |
-| Speech recognition | `Whisper.net`, `Whisper.net.Runtime` | CPU runtime (the package also pulls in `Whisper.net.Runtime.Metal` for macOS), **pinned to 1.9.x**. Models are downloaded on first use into `<ApplicationData>/Cutback/models` by `ModelStore`, never bundled. Token `Start`/`End` are `long` centiseconds. The initial prompt is primed with disfluent text (and carried into every window) because Whisper otherwise drops "um"s. |
+| Speech recognition | `Whisper.net`, `Whisper.net.Runtime` | CPU runtime (the package also pulls in `Whisper.net.Runtime.Metal` for macOS), **pinned to 1.9.x**. Models are downloaded on first use into `<ApplicationData>/Cutback/models` by `ModelStore`, never bundled. Token `Start`/`End`/`DtwTimestamp` are `long` centiseconds (`DtwTimestamp` is -1 when unavailable). DTW alignment is on so words get an `Anchor`; see "Locating filler words". The initial prompt is primed with disfluent text (and carried into every window) because Whisper otherwise drops "um"s. |
 | Waveform drawing | SkiaSharp **transitively via `Avalonia.Skia`** (2.88.x) | **Do not add a direct `SkiaSharp` PackageReference.** Custom drawing obtains an `SKCanvas` through `ISkiaSharpApiLeaseFeature` and must use the same SkiaSharp assembly Avalonia does. A direct reference to current SkiaSharp (4.x) unifies to an incompatible version and breaks Avalonia's renderer. |
 | JSON | `System.Text.Json` | Source-generated context, no reflection. |
 | Tests | `xunit`, `FluentAssertions` | FluentAssertions **pinned to 7.x** (Apache-2.0). 8.x moved to a commercial licence. |
@@ -201,15 +201,31 @@ Ruler: scrub.
 ### Transcript gestures
 
 The transcript panel (View → Transcript) is a second editing surface over the same `SegmentList`.
-A word is struck through when its midpoint lies in a disabled segment (`TranscriptView.IsCut`).
+A word is struck through when its `Anchor` (or, for transcripts without anchors, its midpoint)
+lies in a disabled segment (`TranscriptView.IsCut`).
 **Click a word**: cut it, or restore it if it is struck. **Drag across words**: the run takes the
 opposite state of the word the drag started on. Both are `SetRange`, so they mark the section
 manual and are one undo step. **Cmd/Ctrl+click**: play from the word. **Right-click**: Play from
 here, Cut / Restore. Word edges snap to the quietest waveform bucket within ±40 ms (twice the
-boundary-drag window, because Whisper timing is coarse). "Remove filler words" runs Transcribe
-first if there is no transcript, then `FillerDetector` → snap → `FillerCutPlanner` →
-`ApplyFillerCuts`, one undo step. Export Transcript writes the *edited* transcript (`.txt` or
-`.srt`) with times remapped by `OutputTimeline` so it lines up with the exported video.
+boundary-drag window, because Whisper timing is coarse). Export Transcript writes the *edited*
+transcript (`.txt` or `.srt`) with times remapped by `OutputTimeline` so it lines up with the
+exported video.
+
+### Locating filler words
+
+**Whisper's heuristic `Start`/`End` for a short "uh" usually lands on the pause beside it, not on
+the sound.** Measured on a real recording, two of three "uh"s were timed onto silence, one with
+its audio folded into the previous word's span. So "Remove filler words" does not cut the
+heuristic span. `WhisperTranscriber` enables DTW alignment (`UseDtwTimeStamps` with the model's
+heads preset) and each `Word` carries an `Anchor`: the DTW time of its first token, which does
+fall inside the spoken word. `FillerSpanLocator` (Core, pure) then takes the burst of speech in
+the 10 ms loudness envelope (`Waveform.Envelope`) that contains the anchor; when a neighbour's
+heuristic span swallowed that burst it splits at the quietest point between them if that is a
+real valley (under 75% of the burst's median, never within 100 ms of the burst edge), else 80 ms
+before the anchor / 300 ms after it. The pipeline is `FillerDetector` → `FillerSpanLocator` (falling
+back to the snapped heuristic span for words without anchors) → `FillerCutPlanner` →
+`ApplyFillerCuts`, one undo step. Transcripts made before anchors existed still work, and the
+status line tells the user to transcribe again for aligned cuts.
 
 ---
 

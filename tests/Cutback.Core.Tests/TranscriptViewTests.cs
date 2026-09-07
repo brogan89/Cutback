@@ -36,6 +36,18 @@ public sealed class TranscriptViewTests
     }
 
     [Fact]
+    public void A_word_with_an_anchor_is_judged_by_the_anchor_not_the_midpoint()
+    {
+        // Whisper put this "uh" on the pause after it (midpoint 3.5, kept) but its anchor is in the cut.
+        var anchored = new Word("uh", 3.2, 3.8, 0.9, Anchor: 2.5);
+        // And this neighbour's heuristic span swallowed the cut (midpoint 2.4) though it was spoken before it.
+        var neighbour = new Word("like", 1.8, 3.0, 0.9, Anchor: 1.9);
+
+        TranscriptView.IsCut(anchored, Segments).Should().BeTrue();
+        TranscriptView.IsCut(neighbour, Segments).Should().BeFalse();
+    }
+
+    [Fact]
     public void A_word_past_the_end_of_the_timeline_takes_the_last_segment()
     {
         var late = new Word("late", 9.9, 10.3, 0.9);

@@ -125,4 +125,30 @@ public sealed class WaveformSnapTests
         waveform.SnapToZeroCrossing(-1.0, 0.020).Should().BeGreaterThanOrEqualTo(0.0);
         waveform.SnapToZeroCrossing(5.0, 0.020).Should().BeLessThanOrEqualTo(waveform.DurationSeconds);
     }
+
+    // ---- Envelope ---------------------------------------------------------------------------
+
+    [Fact]
+    public void Envelope_averages_peak_amplitude_over_each_bucket()
+    {
+        // 2 ms peaks; a 10 ms envelope bucket covers five of them.
+        var finest = new Peak[10];
+        Array.Fill(finest, new Peak(-100, 60), 0, 5);   // amplitude 100
+        Array.Fill(finest, new Peak(-20, 1000), 5, 5);  // amplitude 1000
+        var waveform = Waveform.Build(finest, finestSamplesPerBucket: 16, sampleRate: 8000, levelFactor: 4, levelCount: 1);
+
+        waveform.Envelope(0.010).Should().Equal(100.0, 1000.0);
+    }
+
+    [Fact]
+    public void Envelope_averages_a_short_trailing_bucket_over_the_peaks_it_has()
+    {
+        var finest = new Peak[7];
+        Array.Fill(finest, new Peak(-100, 100), 0, 5);
+        finest[5] = new Peak(-200, 0);
+        finest[6] = new Peak(0, 400);
+        var waveform = Waveform.Build(finest, finestSamplesPerBucket: 16, sampleRate: 8000, levelFactor: 4, levelCount: 1);
+
+        waveform.Envelope(0.010).Should().Equal(100.0, 300.0);
+    }
 }

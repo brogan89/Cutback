@@ -67,6 +67,18 @@ public sealed class WordAssemblerTests
     }
 
     [Fact]
+    public void A_word_takes_the_anchor_of_its_first_token()
+    {
+        var words = WordAssembler.FromTokens([
+            new TokenTiming(" hel", 0.0, 0.2, 0.9f, Anchor: 0.12),
+            new TokenTiming("lo", 0.2, 0.3, 0.9f, Anchor: 0.25),
+            new TokenTiming(" world", 0.4, 0.8, 0.9f),
+        ]);
+
+        words.Select(w => w.Anchor).Should().Equal(0.12, null);
+    }
+
+    [Fact]
     public void Whisper_special_tokens_are_skipped()
     {
         var words = WordAssembler.FromTokens([T("<|en|>", 0.0, 0.0), T("<|transcribe|>", 0.0, 0.0), T(" hello", 0.1, 0.4), T("<|endoftext|>", 0.4, 0.4)]);

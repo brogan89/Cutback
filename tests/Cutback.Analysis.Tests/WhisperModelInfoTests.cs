@@ -36,6 +36,15 @@ public sealed class WhisperModelInfoTests
     }
 
     [Fact]
+    public void Every_model_has_a_matching_alignment_heads_preset()
+    {
+        foreach (var model in Enum.GetValues<WhisperModel>())
+        {
+            WhisperTranscriber.AlignmentHeadsFor(model).Should().NotBe(Whisper.net.WhisperAlignmentHeadsPreset.None, $"{model} needs DTW heads");
+        }
+    }
+
+    [Fact]
     public void Display_name_shows_the_approximate_size_in_megabytes()
     {
         WhisperModelInfo.For(WhisperModel.BaseEn).DisplayName.Should().Be("base.en (~148 MB)");

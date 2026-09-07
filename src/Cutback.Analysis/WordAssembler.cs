@@ -25,6 +25,7 @@ public static class WordAssembler
         var end = 0.0;
         var probabilitySum = 0.0;
         var tokenCount = 0;
+        double? anchor = null;
 
         foreach (var token in tokens)
         {
@@ -44,6 +45,7 @@ public static class WordAssembler
             {
                 start = token.Start;
                 end = token.End;
+                anchor = token.Anchor;
             }
 
             text.Append(trimmed);
@@ -66,12 +68,13 @@ public static class WordAssembler
             if (wordText.Length > 0)
             {
                 var wordEnd = end > start ? end : start + MinWordSeconds;
-                words.Add(new Word(wordText, start, wordEnd, probabilitySum / tokenCount));
+                words.Add(new Word(wordText, start, wordEnd, probabilitySum / tokenCount, anchor));
             }
 
             text.Clear();
             probabilitySum = 0;
             tokenCount = 0;
+            anchor = null;
         }
     }
 }

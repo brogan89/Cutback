@@ -20,14 +20,29 @@ public sealed class WhisperTranscriber : ITranscriber
 
     private readonly FfmpegLocation _ffmpeg;
     private readonly string _modelPath;
+    private readonly WhisperModel _model;
 
-    public WhisperTranscriber(FfmpegLocation ffmpeg, string modelPath)
+    /// <param name="ffmpeg">Used to decode the audio.</param>
+    /// <param name="modelPath">A downloaded ggml model file; see <c>ModelStore</c>.</param>
+    /// <param name="model">Which model the file holds, so the matching DTW alignment heads are used.</param>
+    public WhisperTranscriber(FfmpegLocation ffmpeg, string modelPath, WhisperModel model)
     {
         ArgumentNullException.ThrowIfNull(ffmpeg);
         ArgumentException.ThrowIfNullOrWhiteSpace(modelPath);
         _ffmpeg = ffmpeg;
         _modelPath = modelPath;
+        _model = model;
     }
+
+    /// <summary>The alignment heads preset shipped in whisper.cpp for each model we offer.</summary>
+    public static WhisperAlignmentHeadsPreset AlignmentHeadsFor(WhisperModel model) => model switch
+    {
+        WhisperModel.TinyEn => WhisperAlignmentHeadsPreset.TinyEn,
+        WhisperModel.BaseEn => WhisperAlignmentHeadsPreset.BaseEn,
+        WhisperModel.SmallEn => WhisperAlignmentHeadsPreset.SmallEn,
+        WhisperModel.MediumEn => WhisperAlignmentHeadsPreset.MediumEn,
+        _ => WhisperAlignmentHeadsPreset.None,
+    };
 
     public async Task<IReadOnlyList<Word>> TranscribeAsync(string mediaPath, IProgress<double>? progress, CancellationToken cancellationToken)
     {
@@ -63,8 +78,10 @@ public sealed class WhisperTranscriber : ITranscriber
                 continue;
             }
 
+            // DtwTimestamp is -1 when alignment is unavailable for a token.
             words.AddRange(WordAssembler.FromTokens(segment.Tokens.Select(t =>
-                new TokenTiming(t.Text ?? string.Empty, t.Start / 100.0, t.End / 100.0, t.Probability))));
+                new TokenTiming(t.Text ?? string.Empty, t.Start / 100.0, t.End / 100.0, t.Probability,
+                    t.DtwTimestamp >= 0 ? t.DtwTimestamp / 100.0 : null))));
         }
 
         return words.OrderBy(w => w.Start).ToList();
@@ -75,7 +92,13 @@ public sealed class WhisperTranscriber : ITranscriber
     {
         try
         {
-            return WhisperFactory.FromPath(_modelPath);
+            // DTW alignment gives each token an anchor inside its real audio. The heuristic
+            // timestamps alone put short fillers on the neighbouring pause more often than not.
+            return WhisperFactory.FromPath(_modelPath, new WhisperFactoryOptions
+            {
+                UseDtwTimeStamps = true,
+                HeadsPreset = AlignmentHeadsFor(_model),
+            });
         }
         catch (Exception ex)
         {
