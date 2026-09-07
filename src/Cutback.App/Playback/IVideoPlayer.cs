@@ -7,7 +7,10 @@ namespace Cutback.App.Playback;
 /// </summary>
 public interface IVideoPlayer : IDisposable
 {
-    /// <summary>Playhead moved. Fires several times a second during playback and once after a seek.</summary>
+    /// <summary>
+    /// Playhead moved. Fires at roughly display rate during playback (interpolated between the
+    /// player's own, much sparser, time reports) and once after a seek.
+    /// </summary>
     event EventHandler<double>? PositionChanged;
 
     /// <summary><see cref="IsPlaying"/> changed.</summary>

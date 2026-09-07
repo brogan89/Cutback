@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Avalonia.Threading;
+using Cutback.Core.Playback;
 using LibVLCSharp.Shared;
 using VlcMedia = LibVLCSharp.Shared.Media;
 
@@ -9,9 +11,20 @@ namespace Cutback.App.Playback;
 /// deadlocks if you call back into it from them, so every callback is posted to the UI thread
 /// before anything else happens.
 /// </summary>
+/// <remarks>
+/// libVLC reports the time only a few times a second, which makes a playhead drawn straight from
+/// those reports hop. While playing, a UI timer raises <see cref="PositionChanged"/> at about
+/// 60 Hz with a <see cref="PlayheadInterpolator"/> estimate, re-synced on every real report.
+/// </remarks>
 public sealed class VlcVideoPlayer : IVideoPlayer
 {
+    /// <summary>About 60 Hz; the timeline redraw per tick is cheap.</summary>
+    private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(16);
+
     private readonly LibVLC _libVlc;
+    private readonly PlayheadInterpolator _clock = new();
+    private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+    private readonly DispatcherTimer _timer;
     private VlcMedia? _media;
     private bool _isPlaying;
     private double _position;
@@ -24,6 +37,8 @@ public sealed class VlcVideoPlayer : IVideoPlayer
     {
         _libVlc = new LibVLC(enableDebugLogs: false, "--no-video-title-show", "--no-osd");
         MediaPlayer = new MediaPlayer(_libVlc);
+        _timer = new DispatcherTimer { Interval = TickInterval };
+        _timer.Tick += (_, _) => OnTick();
 
         MediaPlayer.TimeChanged += (_, e) => Post(() => OnTime(e.Time));
         MediaPlayer.Playing += (_, _) => Post(OnPlaying);
@@ -35,6 +50,7 @@ public sealed class VlcVideoPlayer : IVideoPlayer
             if (e.Length > 0)
             {
                 _duration = e.Length / 1000.0;
+                _clock.Duration = _duration;
             }
         });
     }
@@ -69,6 +85,8 @@ public sealed class VlcVideoPlayer : IVideoPlayer
 
         _media = media;
         _duration = media.Duration > 0 ? media.Duration / 1000.0 : 0;
+        _clock.Duration = _duration;
+        _clock.Seek(0, Now);
         _position = 0;
         MediaPlayer.Media = media;
 
@@ -137,7 +155,7 @@ public sealed class VlcVideoPlayer : IVideoPlayer
         if (state is VLCState.Playing or VLCState.Paused)
         {
             MediaPlayer.Time = ms;
-            OnTime(ms);
+            OnSeeked(ms);
             return;
         }
 
@@ -161,6 +179,8 @@ public sealed class VlcVideoPlayer : IVideoPlayer
         _pendingSeekMs = null;
         _pauseOnNextPlaying = false;
         _duration = 0;
+        _clock.Duration = 0;
+        _clock.Seek(0, Now);
         _position = 0;
         SetPlaying(false);
         PositionChanged?.Invoke(this, 0);
@@ -175,6 +195,7 @@ public sealed class VlcVideoPlayer : IVideoPlayer
 
         _disposed = true;
         Unload();
+        _timer.Stop();
         MediaPlayer.Dispose();
         _libVlc.Dispose();
     }
@@ -187,7 +208,7 @@ public sealed class VlcVideoPlayer : IVideoPlayer
         {
             _pendingSeekMs = null;
             MediaPlayer.Time = ms;
-            OnTime(ms);
+            OnSeeked(ms);
         }
 
         if (_pauseOnNextPlaying)
@@ -200,9 +221,27 @@ public sealed class VlcVideoPlayer : IVideoPlayer
         SetPlaying(true);
     }
 
+    private double Now => _stopwatch.Elapsed.TotalSeconds;
+
+    /// <summary>A real time report from VLC: re-sync the interpolator, never moving backwards.</summary>
     private void OnTime(long ms)
     {
-        _position = ms / 1000.0;
+        _clock.Report(ms / 1000.0, Now);
+        Emit();
+    }
+
+    /// <summary>The playhead was moved on purpose, so backwards is fine.</summary>
+    private void OnSeeked(long ms)
+    {
+        _clock.Seek(ms / 1000.0, Now);
+        Emit();
+    }
+
+    private void OnTick() => Emit();
+
+    private void Emit()
+    {
+        _position = _clock.Estimate(Now);
         PositionChanged?.Invoke(this, _position);
     }
 
@@ -230,6 +269,17 @@ public sealed class VlcVideoPlayer : IVideoPlayer
         }
 
         _isPlaying = playing;
+        if (playing)
+        {
+            _clock.Resume(Now);
+            _timer.Start();
+        }
+        else
+        {
+            _timer.Stop();
+            _clock.Pause(Now);
+        }
+
         PlaybackStateChanged?.Invoke(this, EventArgs.Empty);
     }
 }
