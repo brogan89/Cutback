@@ -75,19 +75,25 @@ jobs:
         include:
           # VideoLAN.LibVLC.Windows is only referenced when the build host is Windows,
           # so win-x64 must be published on a Windows runner.
+          # `whisper` is the folder Whisper.net.Runtime uses under runtimes/ for that platform;
+          # its names are not .NET RIDs (macos-arm64, not osx-arm64).
           - os: windows-latest
             rid: win-x64
+            whisper: win-x64
             natives: true
           - os: ubuntu-latest
             rid: linux-x64
+            whisper: linux-x64
             natives: true
           # Inside an .app bundle loose dylibs are what codesign expects, so do not self-extract.
           - os: macos-latest
             rid: osx-arm64
+            whisper: macos-arm64
             natives: false
     env:
       VERSION: ${{ needs.version.outputs.version }}
       RID: ${{ matrix.rid }}
+      WHISPER_RUNTIME: ${{ matrix.whisper }}
     steps:
       - name: Keep LF line endings
         if: runner.os == 'Windows'
@@ -113,6 +119,25 @@ jobs:
             -p:Version="$VERSION" \
             -p:ContinuousIntegrationBuild=true \
             -o "artifacts/publish/$RID"
+
+      # Whisper.net.Runtime copies its native libraries for every platform into runtimes/, even
+      # for a RID-specific publish. Besides the bloat, codesign refuses a macOS bundle that
+      # contains foreign .so files, so keep only this platform's folder.
+      - name: Keep only this platform's Whisper natives
+        shell: bash
+        run: |
+          runtimes="artifacts/publish/$RID/runtimes"
+          if [[ ! -d "$runtimes/$WHISPER_RUNTIME" ]]; then
+            echo "::error::$runtimes/$WHISPER_RUNTIME is missing; check the whisper matrix entry"
+            exit 1
+          fi
+          for dir in "$runtimes"/*/; do
+            dir=${dir%/}
+            if [[ "$(basename "$dir")" != "$WHISPER_RUNTIME" ]]; then
+              rm -rf "$dir"
+            fi
+          done
+          ls "$runtimes"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
