@@ -65,4 +65,12 @@ public sealed class WordAssemblerTests
     {
         WordAssembler.FromTokens([]).Should().BeEmpty();
     }
+
+    [Fact]
+    public void Whisper_special_tokens_are_skipped()
+    {
+        var words = WordAssembler.FromTokens([T("<|en|>", 0.0, 0.0), T("<|transcribe|>", 0.0, 0.0), T(" hello", 0.1, 0.4), T("<|endoftext|>", 0.4, 0.4)]);
+
+        words.Should().ContainSingle().Which.Text.Should().Be("hello");
+    }
 }

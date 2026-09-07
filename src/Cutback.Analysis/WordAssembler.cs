@@ -5,7 +5,7 @@ namespace Cutback.Analysis;
 /// <summary>
 /// Groups Whisper's sub-word tokens into words. Whisper marks a word boundary with a leading
 /// space on the first token of the word; punctuation-only tokens belong to the word before them;
-/// control tokens such as <c>[_BEG_]</c> carry no text.
+/// control tokens such as <c>[_BEG_]</c> and special tokens such as <c>&lt;|endoftext|&gt;</c> carry no text.
 /// </summary>
 public static class WordAssembler
 {
@@ -28,12 +28,11 @@ public static class WordAssembler
 
         foreach (var token in tokens)
         {
-            if (string.IsNullOrWhiteSpace(token.Text) || token.Text.StartsWith("[_", StringComparison.Ordinal))
+            var trimmed = token.Text.Trim();
+            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("[_", StringComparison.Ordinal) || trimmed.StartsWith("<|", StringComparison.Ordinal))
             {
                 continue;
             }
-
-            var trimmed = token.Text.Trim();
             var punctuationOnly = trimmed.All(char.IsPunctuation);
             var startsWord = tokenCount > 0 && char.IsWhiteSpace(token.Text[0]) && !punctuationOnly;
             if (startsWord)
