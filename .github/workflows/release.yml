@@ -122,22 +122,21 @@ jobs:
 
       # Whisper.net.Runtime copies its native libraries for every platform into runtimes/, even
       # for a RID-specific publish. Besides the bloat, codesign refuses a macOS bundle that
-      # contains foreign .so files, so keep only this platform's folder.
-      - name: Keep only this platform's Whisper natives
+      # contains foreign .so files, so drop every folder but this platform's. Where natives
+      # self-extract (Windows, Linux) the single-file bundler has already absorbed this
+      # platform's folder, so only foreign ones are left loose; on macOS it stays on disk.
+      - name: Drop other platforms' Whisper natives
         shell: bash
         run: |
           runtimes="artifacts/publish/$RID/runtimes"
-          if [[ ! -d "$runtimes/$WHISPER_RUNTIME" ]]; then
-            echo "::error::$runtimes/$WHISPER_RUNTIME is missing; check the whisper matrix entry"
-            exit 1
-          fi
           for dir in "$runtimes"/*/; do
             dir=${dir%/}
             if [[ "$(basename "$dir")" != "$WHISPER_RUNTIME" ]]; then
               rm -rf "$dir"
             fi
           done
-          ls "$runtimes"
+          rmdir "$runtimes" 2>/dev/null || true
+          echo "Remaining under $runtimes:"; ls -R "$runtimes" 2>/dev/null || echo "(none; natives are inside the single-file bundle)"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
