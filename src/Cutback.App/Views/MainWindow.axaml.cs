@@ -36,6 +36,7 @@ public partial class MainWindow : Window
         SaveMenuItem.InputGesture = KeyGesture.Parse($"{mod}+S");
         SaveAsMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Shift+S");
         ExportMenuItem.InputGesture = KeyGesture.Parse($"{mod}+E");
+        ExportTranscriptMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Shift+E");
         // Preferences (Cmd+, / Ctrl+,) gets no label: Avalonia renders the key as "OemComma".
         UndoMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Z");
         RedoMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Shift+Z");

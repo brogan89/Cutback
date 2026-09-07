@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Cutback.Analysis;
@@ -63,7 +64,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProject), nameof(Title), nameof(SourceFileName), nameof(ProjectName))]
-    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand), nameof(ExportTranscriptCommand))]
     public partial CutbackProject? Project { get; private set; }
 
     /// <summary>Where the project was last saved or loaded from. Null for an unsaved project.</summary>
@@ -173,6 +174,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>Mirrors <c>Project.Transcript</c> for binding. Empty until the project is transcribed.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasTranscript))]
+    [NotifyCanExecuteChangedFor(nameof(ExportTranscriptCommand))]
     public partial IReadOnlyList<Word> Transcript { get; private set; } = [];
 
     public bool HasTranscript => Transcript.Count > 0;
@@ -279,7 +281,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ---- busy ---------------------------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand), nameof(ExportTranscriptCommand))]
     public partial bool IsBusy { get; private set; }
 
     [ObservableProperty]
@@ -970,6 +972,45 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (export.IsDone)
         {
             StatusMessage = $"Exported {export.OutputFileName}.";
+        }
+    }
+
+    private bool CanExportTranscript => HasProject && HasTranscript && !IsBusy;
+
+    /// <summary>Writes the edited transcript: cut words omitted, times matching the exported video. Format follows the extension.</summary>
+    [RelayCommand(CanExecute = nameof(CanExportTranscript))]
+    private async Task ExportTranscriptAsync()
+    {
+        if (Project is null || Segments is null || !HasTranscript)
+        {
+            return;
+        }
+
+        var path = await _files.PickTranscriptTargetAsync(ProjectName);
+        if (path is null)
+        {
+            return;
+        }
+
+        var isSrt = string.Equals(Path.GetExtension(path), ".srt", StringComparison.OrdinalIgnoreCase);
+        if (!isSrt)
+        {
+            path = NormalizeExtension(path, ".txt");
+        }
+
+        var segments = Segments.Segments;
+        var text = isSrt
+            ? TranscriptExporter.ToSrt(Transcript, segments)
+            : TranscriptExporter.ToPlainText(Transcript, segments);
+
+        try
+        {
+            await File.WriteAllTextAsync(path, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), CancellationToken.None);
+            StatusMessage = $"Exported {Path.GetFileName(path)}.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ErrorMessage = $"Could not write the transcript.\n\n{ex.Message}";
         }
     }
 

@@ -26,6 +26,8 @@
     <KeyBinding Gesture="Ctrl+N" Command="{Binding NewProjectCommand}" />
     <KeyBinding Gesture="Cmd+E" Command="{Binding ExportCommand}" />
     <KeyBinding Gesture="Ctrl+E" Command="{Binding ExportCommand}" />
+    <KeyBinding Gesture="Cmd+Shift+E" Command="{Binding ExportTranscriptCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+E" Command="{Binding ExportTranscriptCommand}" />
     <KeyBinding Gesture="Cmd+OemComma" Command="{Binding ShowPreferencesCommand}" />
     <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding ShowPreferencesCommand}" />
     <KeyBinding Gesture="Cmd+Z" Command="{Binding UndoCommand}" />
@@ -71,6 +73,7 @@
         <MenuItem x:Name="SaveAsMenuItem" Header="Save _As…" Command="{Binding SaveProjectAsCommand}" />
         <Separator />
         <MenuItem x:Name="ExportMenuItem" Header="_Export…" Command="{Binding ExportCommand}" />
+        <MenuItem x:Name="ExportTranscriptMenuItem" Header="Export _Transcript…" Command="{Binding ExportTranscriptCommand}" />
         <Separator />
         <MenuItem Header="_Preferences…" Command="{Binding ShowPreferencesCommand}" />
       </MenuItem>
