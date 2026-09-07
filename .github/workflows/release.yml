@@ -1,10 +1,18 @@
 name: Release
 
-# Releases are manual: run this workflow from the Actions tab with a version and tick "publish"
-# to create the tag and GitHub Release. Every pull request and every merge to main runs the same
-# pipeline as a dry run (archives uploaded as workflow artifacts, nothing published) so packaging
-# breakage blocks the PR rather than the next release. The per-RID build jobs are required status
-# checks on main.
+# Every merge to main publishes a GitHub Release for all three platforms. The version is the last
+# stable v<X.Y.Z> tag with the patch bumped, or <Version> from Directory.Build.props when that is
+# ahead of the tags (bump it in a PR to start a new minor or major) or when no tag exists yet.
+# Pull requests run the same pipeline as a dry run (archives uploaded as workflow artifacts,
+# nothing published) so packaging breakage blocks the PR rather than the release. The per-RID
+# build jobs are required status checks on main.
+#
+# workflow_dispatch remains for prereleases (0.2.0-beta.1) and explicit versions: enter the version
+# and tick "publish" on main. Prerelease tags are ignored when computing the next automatic version.
+#
+# Runs on main are serialised by the concurrency group, so each merge sees the previous merge's
+# tag. GitHub keeps at most one pending run per group, so if three merges land within one build
+# the middle one is skipped; its changes ship in the next merge's release.
 
 on:
   push:
@@ -41,6 +49,11 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       publish: ${{ steps.v.outputs.publish }}
     steps:
+      # Tags are needed to compute the next automatic version.
+      - uses: actions/checkout@v7
+        with:
+          fetch-tags: true
+
       - id: v
         env:
           INPUT_VERSION: ${{ inputs.version }}
@@ -49,6 +62,23 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             version="$INPUT_VERSION"
             publish="$INPUT_PUBLISH"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            props=$(sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' Directory.Build.props)
+            props=${props%%-*}
+            # Stable tags only; a prerelease tag from a manual run must not feed the next version.
+            latest=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+            if [[ -z "$latest" ]]; then
+              version="$props"
+            else
+              IFS=. read -r major minor patch <<< "${latest#v}"
+              version="$major.$minor.$((patch + 1))"
+              # A <Version> bump in Directory.Build.props that is ahead of the tags wins.
+              if [[ "$props" != "$version" && "$(printf '%s\n%s\n' "$version" "$props" | sort -V | tail -1)" == "$props" ]]; then
+                version="$props"
+              fi
+            fi
+            echo "Last stable tag: ${latest:-none}; Directory.Build.props: $props"
+            publish=true
           else
             version="0.0.0-ci.$GITHUB_RUN_NUMBER"
             publish=false
@@ -104,6 +134,14 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+
+      # Versions are computed by the workflow, so nobody edits app.manifest per release.
+      - name: Stamp version into app.manifest
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          sed -i "s/\(assemblyIdentity version=\"\)[0-9.]*\"/\1${VERSION%%-*}.0\"/" src/Cutback.App/app.manifest
+          grep assemblyIdentity src/Cutback.App/app.manifest
 
       - name: Publish
         shell: bash
