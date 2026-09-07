@@ -241,8 +241,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         catch (ModelLoadException ex)
         {
-            _models.Delete(model);
-            ErrorMessage = ex.Message;
+            if (!_models.IsPlausiblyComplete(model))
+            {
+                _models.Delete(model);
+                ErrorMessage = ex.Message + " The cached file looked incomplete and has been removed; run Transcribe again to download it.";
+            }
+            else
+            {
+                ErrorMessage = ex.Message + $" If this keeps happening, delete the file at {ex.ModelPath} to download it again.";
+            }
+
             return false;
         }
         catch (DllNotFoundException ex)

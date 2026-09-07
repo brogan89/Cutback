@@ -80,7 +80,7 @@ public sealed class WhisperTranscriber : ITranscriber
         catch (Exception ex)
         {
             throw new ModelLoadException(
-                $"The speech model at {_modelPath} could not be loaded. It may be corrupt; it will be downloaded again next time.",
+                $"The speech model at {_modelPath} could not be loaded: {ex.Message}",
                 _modelPath,
                 ex);
         }

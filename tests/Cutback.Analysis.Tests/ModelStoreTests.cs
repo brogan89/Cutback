@@ -80,6 +80,26 @@ public sealed class ModelStoreTests : IDisposable
     }
 
     [Fact]
+    public void IsPlausiblyComplete_is_false_when_missing_or_short_and_true_when_near_the_expected_size()
+    {
+        var store = new ModelStore(_dir);
+        Directory.CreateDirectory(_dir);
+
+        store.IsPlausiblyComplete(WhisperModel.TinyEn).Should().BeFalse();
+
+        var path = store.PathFor(WhisperModel.TinyEn);
+        File.WriteAllBytes(path, [1, 2, 3]);
+        store.IsPlausiblyComplete(WhisperModel.TinyEn).Should().BeFalse();
+
+        using (var stream = new FileStream(path, FileMode.Create))
+        {
+            stream.SetLength((long)(WhisperModelInfo.For(WhisperModel.TinyEn).ApproximateBytes * 0.95));
+        }
+
+        store.IsPlausiblyComplete(WhisperModel.TinyEn).Should().BeTrue();
+    }
+
+    [Fact]
     public void Delete_removes_the_cached_model_and_is_a_no_op_when_absent()
     {
         var store = new ModelStore(_dir);

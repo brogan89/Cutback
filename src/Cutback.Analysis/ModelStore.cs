@@ -8,6 +8,9 @@ namespace Cutback.Analysis;
 /// </summary>
 public sealed class ModelStore
 {
+    /// <summary>A cached or downloaded file at least this fraction of the approximate size is treated as complete.</summary>
+    private const double MinimumCompleteFraction = 0.9;
+
     public ModelStore(string cacheDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheDirectory);
@@ -23,6 +26,22 @@ public sealed class ModelStore
     public string PathFor(WhisperModel model) => Path.Combine(CacheDirectory, WhisperModelInfo.For(model).FileName);
 
     public bool IsDownloaded(WhisperModel model) => File.Exists(PathFor(model));
+
+    /// <summary>
+    /// True when the cached file for <paramref name="model"/> exists and its length is at least
+    /// <c>90%</c> of the expected download size, i.e. it is unlikely to be a truncated or corrupt file.
+    /// </summary>
+    public bool IsPlausiblyComplete(WhisperModel model)
+    {
+        var path = PathFor(model);
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        var expected = WhisperModelInfo.For(model).ApproximateBytes;
+        return new FileInfo(path).Length >= expected * MinimumCompleteFraction;
+    }
 
     /// <summary>Returns the model's path, downloading it first if it is not cached.</summary>
     /// <param name="model">Which Whisper model to ensure is present.</param>
@@ -61,7 +80,7 @@ public sealed class ModelStore
                 }
             }
 
-            if (received < info.ApproximateBytes * 0.9)
+            if (received < info.ApproximateBytes * MinimumCompleteFraction)
             {
                 TryDelete(partial);
                 throw new ModelDownloadException(
