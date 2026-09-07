@@ -136,6 +136,22 @@ public sealed class SegmentListFillerTests
     }
 
     [Fact]
+    public void Re_running_does_not_spread_manual_origin_over_kept_auto_footage()
+    {
+        var list = new SegmentList(Duration);
+        list.ApplyFillerCuts([Filler(2.0, 2.3)]);
+        list.SetRange(2.3, 2.5, enabled: true); // a manual kept sliver right after the filler cut
+
+        list.ApplyFillerCuts([]);
+
+        list.Segments.Select(s => (s.Start, s.End, s.Enabled, s.Origin)).Should().Equal(
+            (0.0, 2.3, true, SegmentOrigin.Auto),
+            (2.3, 2.5, true, SegmentOrigin.Manual),
+            (2.5, 10.0, true, SegmentOrigin.Auto));
+        list.ShouldBeValidPartitionOf(Duration);
+    }
+
+    [Fact]
     public void Planning_against_the_current_partition_and_applying_twice_keeps_the_same_cuts()
     {
         var list = new SegmentList(Duration);

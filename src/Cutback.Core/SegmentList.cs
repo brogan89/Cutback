@@ -258,6 +258,53 @@ public sealed class SegmentList
     }
 
     /// <summary>
+    /// <see cref="DissolveCore"/>, but used only by <see cref="ApplyFillerCuts"/>: two kept
+    /// neighbours merge into one segment only if they also share the same <see cref="Segment.Origin"/>.
+    /// When their origins differ (e.g. a kept <see cref="SegmentOrigin.Manual"/> sliver next to a
+    /// kept <see cref="SegmentOrigin.Auto"/> region), the region instead joins its left neighbour, or
+    /// its only neighbour at either end of the timeline, and both neighbours keep their own origin
+    /// rather than one spreading over the other.
+    /// </summary>
+    private bool DissolveFillerCore(int index)
+    {
+        if (_segments.Count < 2)
+        {
+            return false;
+        }
+
+        var target = _segments[index];
+        var hasLeft = index > 0;
+        var hasRight = index < _segments.Count - 1;
+
+        if (hasLeft && hasRight
+            && _segments[index - 1].Enabled == _segments[index + 1].Enabled
+            && _segments[index - 1].Origin == _segments[index + 1].Origin)
+        {
+            var left = _segments[index - 1];
+            var right = _segments[index + 1];
+            _segments[index - 1] = left with
+            {
+                End = right.End,
+                Origin = MergeOrigin(left.Origin, right.Origin),
+                Reason = left.Reason ?? right.Reason,
+            };
+            _segments.RemoveRange(index, 2);
+        }
+        else if (hasLeft)
+        {
+            _segments[index - 1] = _segments[index - 1] with { End = target.End };
+            _segments.RemoveAt(index);
+        }
+        else
+        {
+            _segments[index + 1] = _segments[index + 1] with { Start = target.Start };
+            _segments.RemoveAt(index);
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Replaces the whole partition, e.g. from an undo snapshot. <paramref name="segments"/> must
     /// already be in timeline order.
     /// </summary>
@@ -441,7 +488,11 @@ public sealed class SegmentList
     /// segment is dissolved into its neighbours first, so a re-run replaces the previous result,
     /// then each cut is carved out of whatever is there with <see cref="SegmentOrigin.Filler"/>.
     /// Auto and manual segments outside the cuts are untouched; the caller is responsible for not
-    /// passing cuts that overlap manual segments (see <c>FillerCutPlanner</c>).
+    /// passing cuts that overlap manual segments (see <c>FillerCutPlanner</c>). Dissolving a filler
+    /// cut here never merges two kept neighbours of different origins into one: that would spread a
+    /// neighbour's <see cref="SegmentOrigin.Manual"/> origin over the other's footage and lock it
+    /// from future re-detection. Same-origin neighbours still merge, exactly as <see cref="Dissolve"/>
+    /// would.
     /// </summary>
     /// <returns>The number of cuts applied.</returns>
     public int ApplyFillerCuts(IEnumerable<PlannedCut> cuts)
@@ -451,7 +502,7 @@ public sealed class SegmentList
         var changed = false;
         for (var i = _segments.Count - 1; i >= 0; i--)
         {
-            if (_segments[i].Origin == SegmentOrigin.Filler && DissolveCore(i))
+            if (_segments[i].Origin == SegmentOrigin.Filler && DissolveFillerCore(i))
             {
                 changed = true;
             }
