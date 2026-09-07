@@ -4,48 +4,90 @@
         x:Class="Cutback.App.Views.PreferencesWindow"
         x:DataType="vm:PreferencesViewModel"
         Title="Preferences"
-        Width="420" SizeToContent="Height"
+        Classes="dialog"
+        Width="520" Height="500"
         CanResize="False"
-        WindowStartupLocation="CenterOwner"
-        Background="#242429">
+        WindowStartupLocation="CenterOwner">
 
-  <Window.Styles>
-    <Style Selector="TextBlock.dim">
-      <Setter Property="Foreground" Value="#9A9AA6" />
-    </Style>
-  </Window.Styles>
+  <!-- Fixed height rather than SizeToContent: with a TabControl the window would jump on every tab switch. -->
+  <Grid RowDefinitions="*,Auto" Margin="16">
 
-  <StackPanel Margin="20" Spacing="16">
+    <TabControl Grid.Row="0" SelectedIndex="{Binding SelectedTab}">
 
-    <StackPanel Spacing="6">
-      <TextBlock Text="Undo history" />
-      <!-- Bounds mirror AppSettings.MinUndoHistoryLimit / MaxUndoHistoryLimit. -->
-      <NumericUpDown Value="{Binding UndoHistoryLimit}" Minimum="10" Maximum="1000" Increment="10" FormatString="0" />
-      <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" Text="Number of edits you can undo. Lowering it drops the oldest steps." />
-    </StackPanel>
+      <!-- Tab order must match PreferencesViewModel.GeneralTab / DetectionTab / TranscriptionTab. -->
+      <TabItem Header="General">
+        <StackPanel Classes="tab" Spacing="16">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Undo history" />
+            <!-- Bounds mirror AppSettings.MinUndoHistoryLimit / MaxUndoHistoryLimit. -->
+            <NumericUpDown Value="{Binding UndoHistoryLimit}" Minimum="10" Maximum="1000" Increment="10" FormatString="0" />
+            <TextBlock Classes="dim hint" Text="Number of edits you can undo. Lowering it drops the oldest steps." />
+          </StackPanel>
+        </StackPanel>
+      </TabItem>
 
-    <StackPanel Spacing="6">
-      <TextBlock Text="Speech model" />
-      <ComboBox ItemsSource="{Binding SpeechModels}" SelectedItem="{Binding SelectedSpeechModel}" HorizontalAlignment="Stretch">
-        <ComboBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:SpeechModelOption">
-            <TextBlock Text="{Binding Label}" />
-          </DataTemplate>
-        </ComboBox.ItemTemplate>
-      </ComboBox>
-      <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" Text="Used by Transcribe. Larger models are more accurate and slower. A model is downloaded the first time it is used." />
-    </StackPanel>
+      <TabItem Header="Silence detection">
+        <StackPanel Classes="tab" Spacing="14">
+          <!-- Bounds mirror the AppSettings.Min* / Max* detection constants. -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Silence threshold (dB)" />
+            <NumericUpDown Value="{Binding SilenceThresholdDb}" Minimum="-80" Maximum="0" Increment="1" FormatString="0.0" />
+            <TextBlock Classes="dim hint" Text="Audio quieter than this counts as silence. Raise it (towards 0) if breaths and room noise are not being cut." />
+          </StackPanel>
 
-    <StackPanel Spacing="6">
-      <TextBlock Text="Filler words" />
-      <TextBox Text="{Binding FillerWordsText}" />
-      <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" Text="Comma-separated. Remove filler words cuts every transcript word that matches one of these." />
-    </StackPanel>
+          <StackPanel Spacing="4">
+            <TextBlock Text="Minimum silence (ms)" />
+            <NumericUpDown Value="{Binding MinSilenceMs}" Minimum="50" Maximum="5000" Increment="50" FormatString="0" />
+            <TextBlock Classes="dim hint" Text="Pauses shorter than this are left alone." />
+          </StackPanel>
 
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Padding (ms)" />
+            <NumericUpDown Value="{Binding PaddingMs}" Minimum="0" Maximum="500" Increment="10" FormatString="0" />
+            <TextBlock Classes="dim hint" Text="Extra audio kept on each side of a cut so words are not clipped." />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Minimum keep (ms)" />
+            <NumericUpDown Value="{Binding MinKeepMs}" Minimum="0" Maximum="2000" Increment="20" FormatString="0" />
+            <TextBlock Classes="dim hint" Text="Kept fragments shorter than this are removed with their neighbours to avoid a stuttering result." />
+          </StackPanel>
+
+          <Button Content="Reset to defaults" Command="{Binding ResetDetectionCommand}" HorizontalAlignment="Left" />
+
+          <TextBlock Classes="dim hint"
+                     Text="Used by Detect silence and Remove filler words. Re-running detection replaces automatic cuts but never touches segments you have edited by hand." />
+        </StackPanel>
+      </TabItem>
+
+      <TabItem Header="Transcription">
+        <StackPanel Classes="tab" Spacing="16">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Speech model" />
+            <ComboBox ItemsSource="{Binding SpeechModels}" SelectedItem="{Binding SelectedSpeechModel}" HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:SpeechModelOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Classes="dim hint" Text="Used by Transcribe. Larger models are more accurate and slower. A model is downloaded the first time it is used." />
+          </StackPanel>
+
+          <StackPanel Spacing="6">
+            <TextBlock Text="Filler words" />
+            <TextBox Text="{Binding FillerWordsText}" />
+            <TextBlock Classes="dim hint" Text="Comma-separated. Remove filler words cuts every transcript word that matches one of these." />
+          </StackPanel>
+        </StackPanel>
+      </TabItem>
+
+    </TabControl>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
       <Button Content="Cancel" Command="{Binding CancelCommand}" MinWidth="90" IsCancel="True" />
       <Button Content="OK" Command="{Binding SaveCommand}" MinWidth="90" IsDefault="True" Classes="accent" />
     </StackPanel>
 
-  </StackPanel>
+  </Grid>
 </Window>

@@ -92,6 +92,7 @@ public sealed class TimelineControl : Control
     private int _contextSegment = -1;
     private readonly MenuItem _deleteItem;
     private SegmentList? _subscribed;
+    private Palette _palette = Palette.Fallback;
 
     static TimelineControl()
     {
@@ -591,6 +592,14 @@ public sealed class TimelineControl : Control
 
     // ---- rendering ----------------------------------------------------------------------------
 
+    /// <summary>Colours come from Styles/Theme.axaml, reachable through the window once the control is in the tree.</summary>
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _palette = Palette.FromResources(this);
+        InvalidateVisual();
+    }
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -606,7 +615,8 @@ public sealed class TimelineControl : Control
             _gesture == Gesture.Boundary ? _dragBoundaryIndex : _hoverBoundary,
             _gesture == Gesture.Section
                 ? new TimeRange(Math.Min(_sectionAnchor, _sectionCurrent), Math.Max(_sectionAnchor, _sectionCurrent))
-                : null);
+                : null,
+            _palette);
         context.Custom(new DrawOperation(new Rect(Bounds.Size), snapshot));
     }
 
@@ -622,27 +632,76 @@ public sealed class TimelineControl : Control
         double ViewEnd,
         int HoverSegment,
         int ActiveBoundary,
-        TimeRange? PendingSection);
+        TimeRange? PendingSection,
+        Palette Palette);
+
+    /// <summary>The timeline's colours. Keys match the Timeline* entries in Styles/Theme.axaml.</summary>
+    private sealed record Palette(
+        SKColor RulerBackground,
+        SKColor BodyBackground,
+        SKColor KeptBackground,
+        SKColor KeptBackgroundHover,
+        SKColor RemovedBackground,
+        SKColor RemovedBackgroundHover,
+        SKColor KeptWave,
+        SKColor RemovedWave,
+        SKColor Boundary,
+        SKColor BoundaryActive,
+        SKColor SectionFill,
+        SKColor Playhead,
+        SKColor Tick,
+        SKColor Label,
+        SKColor ReasonText,
+        SKColor Hint)
+    {
+        /// <summary>Used before the control is attached and for any key the theme lacks, so the previewer still draws.</summary>
+        public static Palette Fallback { get; } = new(
+            RulerBackground: new SKColor(0x18, 0x18, 0x1C),
+            BodyBackground: new SKColor(0x12, 0x12, 0x15),
+            KeptBackground: new SKColor(0x1D, 0x2E, 0x4D),
+            KeptBackgroundHover: new SKColor(0x26, 0x40, 0x6A),
+            RemovedBackground: new SKColor(0x1F, 0x1F, 0x24),
+            RemovedBackgroundHover: new SKColor(0x2A, 0x2A, 0x31),
+            KeptWave: new SKColor(0x6F, 0xA3, 0xF0),
+            RemovedWave: new SKColor(0x45, 0x45, 0x4E),
+            Boundary: new SKColor(0xC8, 0xC8, 0xD2, 0xB0),
+            BoundaryActive: new SKColor(0xFF, 0xD1, 0x66),
+            SectionFill: new SKColor(0xFF, 0xD1, 0x66, 0x38),
+            Playhead: new SKColor(0xFF, 0x5C, 0x5C),
+            Tick: new SKColor(0x4E, 0x4E, 0x58),
+            Label: new SKColor(0x9A, 0x9A, 0xA6),
+            ReasonText: new SKColor(0x7C, 0x7C, 0x88),
+            Hint: new SKColor(0x60, 0x60, 0x6A));
+
+        public static Palette FromResources(IResourceHost host)
+        {
+            var f = Fallback;
+            return new Palette(
+                Resolve(host, "TimelineRulerBackground", f.RulerBackground),
+                Resolve(host, "TimelineBodyBackground", f.BodyBackground),
+                Resolve(host, "TimelineKeptBackground", f.KeptBackground),
+                Resolve(host, "TimelineKeptBackgroundHover", f.KeptBackgroundHover),
+                Resolve(host, "TimelineRemovedBackground", f.RemovedBackground),
+                Resolve(host, "TimelineRemovedBackgroundHover", f.RemovedBackgroundHover),
+                Resolve(host, "TimelineKeptWave", f.KeptWave),
+                Resolve(host, "TimelineRemovedWave", f.RemovedWave),
+                Resolve(host, "TimelineBoundary", f.Boundary),
+                Resolve(host, "TimelineBoundaryActive", f.BoundaryActive),
+                Resolve(host, "TimelineSectionFill", f.SectionFill),
+                Resolve(host, "TimelinePlayhead", f.Playhead),
+                Resolve(host, "TimelineTick", f.Tick),
+                Resolve(host, "TimelineLabel", f.Label),
+                Resolve(host, "TimelineReasonText", f.ReasonText),
+                Resolve(host, "TimelineHint", f.Hint));
+        }
+
+        // Avalonia's Color.ToUInt32() and SKColor(uint) both pack ARGB, so the conversion is a cast.
+        private static SKColor Resolve(IResourceHost host, string key, SKColor fallback) =>
+            host.TryFindResource(key, out var value) && value is Color color ? new SKColor(color.ToUInt32()) : fallback;
+    }
 
     private sealed class DrawOperation : ICustomDrawOperation
     {
-        private static readonly SKColor RulerBackground = new(0x1E, 0x1E, 0x22);
-        private static readonly SKColor BodyBackground = new(0x15, 0x15, 0x18);
-        private static readonly SKColor KeptBackground = new(0x1F, 0x33, 0x52);
-        private static readonly SKColor KeptBackgroundHover = new(0x27, 0x40, 0x66);
-        private static readonly SKColor RemovedBackground = new(0x22, 0x22, 0x26);
-        private static readonly SKColor RemovedBackgroundHover = new(0x2B, 0x2B, 0x30);
-        private static readonly SKColor KeptWave = new(0x6F, 0xA8, 0xFF);
-        private static readonly SKColor RemovedWave = new(0x4A, 0x4A, 0x52);
-        private static readonly SKColor Boundary = new(0xC8, 0xC8, 0xD2, 0xB0);
-        private static readonly SKColor BoundaryActive = new(0xFF, 0xD1, 0x66);
-        private static readonly SKColor SectionFill = new(0xFF, 0xD1, 0x66, 0x38);
-        private static readonly SKColor Playhead = new(0xFF, 0x5A, 0x5A);
-        private static readonly SKColor Tick = new(0x55, 0x55, 0x5E);
-        private static readonly SKColor Label = new(0xA0, 0xA0, 0xAA);
-        private static readonly SKColor ReasonText = new(0x80, 0x80, 0x8A);
-        private static readonly SKColor Hint = new(0x60, 0x60, 0x6A);
-
         private static readonly double[] NiceIntervals = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600];
 
         private readonly Snapshot _s;
@@ -679,9 +738,9 @@ public sealed class TimelineControl : Control
 
             using var paint = new SKPaint { IsAntialias = false };
 
-            paint.Color = RulerBackground;
+            paint.Color = _s.Palette.RulerBackground;
             canvas.DrawRect(0, 0, w, bodyTop, paint);
-            paint.Color = BodyBackground;
+            paint.Color = _s.Palette.BodyBackground;
             canvas.DrawRect(0, bodyTop, w, h - bodyTop, paint);
 
             if (_s.Duration <= 0 || w <= 0)
@@ -702,7 +761,7 @@ public sealed class TimelineControl : Control
 
         private void DrawHint(SKCanvas canvas, float w, float h, SKPaint paint)
         {
-            paint.Color = Hint;
+            paint.Color = _s.Palette.Hint;
             paint.IsAntialias = true;
             paint.TextSize = 13;
             const string text = "Open a video to see its timeline";
@@ -725,14 +784,14 @@ public sealed class TimelineControl : Control
                 var x1 = Math.Min(w, TimeToX(seg.End));
                 var hover = i == _s.HoverSegment;
                 paint.Color = seg.Enabled
-                    ? (hover ? KeptBackgroundHover : KeptBackground)
-                    : (hover ? RemovedBackgroundHover : RemovedBackground);
+                    ? (hover ? _s.Palette.KeptBackgroundHover : _s.Palette.KeptBackground)
+                    : (hover ? _s.Palette.RemovedBackgroundHover : _s.Palette.RemovedBackground);
                 paint.IsAntialias = false;
                 canvas.DrawRect(x0, top, x1 - x0, bottom - top, paint);
 
                 if (!seg.Enabled && seg.Reason is { Length: > 0 } reason && x1 - x0 > 70)
                 {
-                    paint.Color = ReasonText;
+                    paint.Color = _s.Palette.ReasonText;
                     paint.IsAntialias = true;
                     canvas.Save();
                     canvas.ClipRect(new SKRect(x0 + 2, top, x1 - 2, bottom));
@@ -797,7 +856,7 @@ public sealed class TimelineControl : Control
                 }
 
                 var enabled = _s.Segments.Length == 0 || _s.Segments[segIndex].Enabled;
-                paint.Color = enabled ? KeptWave : RemovedWave;
+                paint.Color = enabled ? _s.Palette.KeptWave : _s.Palette.RemovedWave;
 
                 var yMax = mid - Math.Max(1, max * scale * halfHeight);
                 var yMin = mid - Math.Min(-1, min * scale * halfHeight);
@@ -818,7 +877,7 @@ public sealed class TimelineControl : Control
 
                 var x = (float)Math.Round(TimeToX(t)) + 0.5f;
                 var active = i == _s.ActiveBoundary;
-                paint.Color = active ? BoundaryActive : Boundary;
+                paint.Color = active ? _s.Palette.BoundaryActive : _s.Palette.Boundary;
                 paint.StrokeWidth = active ? 2 : 1;
                 canvas.DrawLine(x, top, x, bottom, paint);
             }
@@ -835,10 +894,10 @@ public sealed class TimelineControl : Control
             var x0 = TimeToX(section.Start);
             var x1 = TimeToX(section.End);
             paint.IsAntialias = false;
-            paint.Color = SectionFill;
+            paint.Color = _s.Palette.SectionFill;
             canvas.DrawRect(x0, top, x1 - x0, bottom - top, paint);
 
-            paint.Color = BoundaryActive;
+            paint.Color = _s.Palette.BoundaryActive;
             paint.StrokeWidth = 1;
             canvas.DrawLine((float)Math.Round(x0) + 0.5f, top, (float)Math.Round(x0) + 0.5f, bottom, paint);
             canvas.DrawLine((float)Math.Round(x1) + 0.5f, top, (float)Math.Round(x1) + 0.5f, bottom, paint);
@@ -864,18 +923,18 @@ public sealed class TimelineControl : Control
                 var t = k * minor;
                 var x = (float)Math.Round(TimeToX(t)) + 0.5f;
                 var isMajor = k % perMajor == 0;
-                paint.Color = Tick;
+                paint.Color = _s.Palette.Tick;
                 paint.IsAntialias = false;
                 canvas.DrawLine(x, isMajor ? bodyTop - 10 : bodyTop - 5, x, bodyTop, paint);
                 if (isMajor)
                 {
-                    paint.Color = Label;
+                    paint.Color = _s.Palette.Label;
                     paint.IsAntialias = true;
                     canvas.DrawText(TimeFormat.Ruler(Math.Round(t, 6)), x + 3, bodyTop - 11, paint);
                 }
             }
 
-            paint.Color = Tick;
+            paint.Color = _s.Palette.Tick;
             paint.IsAntialias = false;
             canvas.DrawLine(0, bodyTop - 0.5f, w, bodyTop - 0.5f, paint);
         }
@@ -888,7 +947,7 @@ public sealed class TimelineControl : Control
             }
 
             var x = (float)Math.Round(TimeToX(_s.Position)) + 0.5f;
-            paint.Color = Playhead;
+            paint.Color = _s.Palette.Playhead;
             paint.IsAntialias = true;
             paint.StrokeWidth = 1.5f;
             canvas.DrawLine(x, 0, x, h, paint);

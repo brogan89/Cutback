@@ -38,8 +38,8 @@ Violating any of these is a bug, not a style preference.
    picks the right one. Git snapshot builds with no version number are treated as modern.
 5. **Every kept audio segment gets an 8ms `afade` in and out.** Without it, every single cut is an
    audible click. This is the difference between a toy and a usable tool.
-6. **Cuts are padded by 60ms on each side by default** (configurable). Detection boundaries are
-   approximate and tight cuts clip consonants.
+6. **Cuts are padded by 60ms on each side by default** (configurable in File → Preferences →
+   Silence detection). Detection boundaries are approximate and tight cuts clip consonants.
 7. **Claude analysis is out of scope for the current phase.** `ICutSuggester` stays a stub. Speech
    recognition (Phase 2) is implemented in `Cutback.Analysis` with Whisper.net and runs entirely on
    the user's machine; the only network access in the app is the one-time model download.
@@ -99,6 +99,7 @@ Cutback/
 │   └── Cutback.App/               # Avalonia
 │       ├── Views/
 │       ├── ViewModels/
+│       ├── Styles/                # Theme.axaml (palette + Fluent overrides), Controls.axaml, Icons.axaml
 │       └── Controls/              # TimelineControl.cs, TranscriptControl.cs
 └── tests/
     ├── Cutback.Core.Tests/
@@ -133,7 +134,7 @@ A project is a JSON file (`.cutback`). Schema:
     { "id": "…", "start": 4.86, "end": 12.04, "enabled": true,  "origin": "manual", "reason": null }
   ],
   "transcript": [],             // [{ "text", "start", "end", "confidence" }], filled by Transcribe
-  "settings": {
+  "settings": {                 // what the last Detect silence run used; edited values are per user
     "paddingMs": 60,
     "minSilenceMs": 400,
     "silenceThresholdDb": -34.0,
@@ -141,6 +142,13 @@ A project is a JSON file (`.cutback`). Schema:
   }
 }
 ```
+
+Detection settings are **per user, not per project**: the editable values live in `AppSettings`
+(`SilenceThresholdDb`, `MinSilenceMs`, `PaddingMs`, `MinKeepMs`, clamped in
+`AppSettingsStore.Sanitize`) and are edited in File → Preferences → Silence detection (also reachable
+from Edit → Detection Settings…). Detect silence and Remove filler words read
+`AppSettingsStore.Current.Detection` at call time; the project's `settings` block only records what
+the last Detect silence run used, so a reopened project does not change the user's defaults.
 
 ### The partition invariant
 
@@ -342,7 +350,18 @@ These will cost you hours if you don't know them:
   deserialises to 0/null. `AppSettingsStore.Load` also clamps and null-guards what it reads.
 - Menu shortcut labels (`MenuItem.InputGesture`) are display-only and set in `MainWindow.axaml.cs`
   so the modifier reads Cmd on macOS and Ctrl elsewhere; the real bindings are `Window.KeyBindings`,
-  registered for both `Cmd+` and `Ctrl+`.
+  registered for both `Cmd+` and `Ctrl+`. The Export button's tooltip gets its shortcut the same way.
+- **The app is dark-only** (`RequestedThemeVariant="Dark"` in `App.axaml`). **No hex colours in views
+  or controls**: every colour is a named resource in `Styles/Theme.axaml`, used through the classes in
+  `Styles/Controls.axaml` (`Border.bar`, `Border.panel`, `Border.banner.error|warning`, `TextBlock.dim`,
+  `.hint`, `.heading`, `.mono`, `Window.dialog`). Skia-drawn controls resolve their `Timeline*` colours
+  with `TryFindResource` in `OnAttachedToVisualTree` and convert with `new SKColor(color.ToUInt32())`;
+  `TranscriptControl` does the same for its `Transcript*Brush` keys.
+- **Toolbar and transport buttons are icon-only**: a `Path` with `Data="{StaticResource Icon<Name>}"`
+  inside a `Classes="icon"` `Button`/`ToggleButton` (`icon accent` for Export), name in `ToolTip.Tip`.
+  Icons are Lucide (ISC), 24×24 with a 2px round stroke, embedded as `StreamGeometry` in
+  `Styles/Icons.axaml`; add new ones there and to `THIRD-PARTY-NOTICES.md`. Icon buttons are
+  `Focusable=False` because Space is a window key binding.
 
 ## Testing
 

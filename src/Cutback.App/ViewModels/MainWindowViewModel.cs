@@ -28,7 +28,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private FfmpegLocation? _ffmpeg;
     private CancellationTokenSource? _openCts;
     private CancellationTokenSource? _busyCts;
-    private bool _loadingSettings;
     private bool _skipping;
     private double? _skipTarget;
 
@@ -109,65 +108,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public partial double DurationSeconds { get; private set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlayPauseTooltip))]
     public partial bool IsPlaying { get; private set; }
+
+    /// <summary>Tooltip for the transport button. Space is the same on every OS, so no code-behind hint is needed.</summary>
+    public string PlayPauseTooltip => IsPlaying ? "Pause (Space)" : "Play (Space)";
 
     public string PositionText => TimeFormat.Clock(PositionSeconds);
 
     public string DurationText => TimeFormat.Clock(DurationSeconds);
-
-    // ---- detection settings -------------------------------------------------------------------
-
-    [ObservableProperty]
-    public partial bool IsSettingsOpen { get; set; }
-
-    [ObservableProperty]
-    public partial double SilenceThresholdDb { get; set; } = DetectionSettings.Default.SilenceThresholdDb;
-
-    [ObservableProperty]
-    public partial int MinSilenceMs { get; set; } = DetectionSettings.Default.MinSilenceMs;
-
-    [ObservableProperty]
-    public partial int PaddingMs { get; set; } = DetectionSettings.Default.PaddingMs;
-
-    [ObservableProperty]
-    public partial int MinKeepMs { get; set; } = DetectionSettings.Default.MinKeepMs;
-
-    /// <summary>The settings as currently shown in the panel.</summary>
-    public DetectionSettings CurrentSettings => new(PaddingMs, MinSilenceMs, SilenceThresholdDb, MinKeepMs);
-
-    partial void OnSilenceThresholdDbChanged(double value) => MarkDirty();
-
-    partial void OnMinSilenceMsChanged(int value) => MarkDirty();
-
-    partial void OnPaddingMsChanged(int value) => MarkDirty();
-
-    partial void OnMinKeepMsChanged(int value) => MarkDirty();
-
-    private void LoadSettings(DetectionSettings settings)
-    {
-        _loadingSettings = true;
-        try
-        {
-            SilenceThresholdDb = settings.SilenceThresholdDb;
-            MinSilenceMs = settings.MinSilenceMs;
-            PaddingMs = settings.PaddingMs;
-            MinKeepMs = settings.MinKeepMs;
-        }
-        finally
-        {
-            _loadingSettings = false;
-        }
-    }
-
-    [RelayCommand]
-    private void ToggleSettings() => IsSettingsOpen = !IsSettingsOpen;
-
-    [RelayCommand]
-    private void ResetSettings()
-    {
-        LoadSettings(DetectionSettings.Default);
-        MarkDirty();
-    }
 
     // ---- transcript ---------------------------------------------------------------------------
 
@@ -459,7 +408,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             Waveform = waveform;
             DurationSeconds = project.Source.DurationSeconds;
             PositionSeconds = 0;
-            LoadSettings(project.Settings);
             IsDirty = false;
             StatusMessage = null;
             WarningMessage = warning;
@@ -542,7 +490,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            var snapshot = Project with { Segments = Segments.Segments.ToList(), Settings = CurrentSettings };
+            var snapshot = Project with { Segments = Segments.Segments.ToList() };
             await ProjectSerializer.SaveAsync(snapshot, path, CancellationToken.None);
             Project = snapshot;
             ProjectPath = path;
@@ -593,7 +541,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void MarkDirty()
     {
-        if (!_loadingSettings && Project is not null)
+        if (Project is not null)
         {
             IsDirty = true;
         }
@@ -803,9 +751,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task ShowPreferencesAsync()
+    private Task ShowPreferencesAsync() => ShowPreferencesAsync(PreferencesViewModel.GeneralTab);
+
+    /// <summary>Edit › Detection Settings…: the same window, opened on the silence detection tab.</summary>
+    [RelayCommand]
+    private Task ShowDetectionSettingsAsync() => ShowPreferencesAsync(PreferencesViewModel.DetectionTab);
+
+    private async Task ShowPreferencesAsync(int tab)
     {
-        var preferences = new PreferencesViewModel(_settings, _models);
+        var preferences = new PreferencesViewModel(_settings, _models) { SelectedTab = tab };
         await _dialogs.ShowPreferencesAsync(preferences);
         _history.Limit = _settings.Current.UndoHistoryLimit;
     }
@@ -876,7 +830,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var settings = CurrentSettings;
+        var settings = _settings.Current.Detection;
         ErrorMessage = null;
         BeginBusy("Detecting silence…");
         try
@@ -931,7 +885,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             spans.Add(new FillerSpan(start, end, FillerDetector.Normalize(w.Text)));
         }
 
-        var cuts = FillerCutPlanner.Plan(spans, Segments.Segments, CurrentSettings, DurationSeconds);
+        var cuts = FillerCutPlanner.Plan(spans, Segments.Segments, _settings.Current.Detection, DurationSeconds);
 
         Edit(s => s.ApplyFillerCuts(cuts));
         IsTranscriptOpen = true;
@@ -1025,7 +979,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         _player.Pause();
-        var snapshot = Project with { Segments = Segments.Segments.ToList(), Settings = CurrentSettings };
+        var snapshot = Project with { Segments = Segments.Segments.ToList() };
         var export = new ExportViewModel(snapshot, snapshot.Segments, ffmpeg, _temp, _files);
         await _dialogs.ShowExportAsync(export);
         if (export.IsDone)

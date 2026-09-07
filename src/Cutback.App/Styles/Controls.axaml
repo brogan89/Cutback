@@ -1,0 +1,153 @@
+<!--
+  Shared control styles. Colours come from Theme.axaml via DynamicResource; views use the classes
+  below instead of local styles or literal colours.
+-->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Windows -->
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource WindowBackgroundBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+  </Style>
+  <Style Selector="Window.dialog">
+    <Setter Property="Background" Value="{DynamicResource BarBackgroundBrush}" />
+  </Style>
+  <Style Selector="Menu">
+    <Setter Property="Background" Value="{DynamicResource WindowBackgroundBrush}" />
+  </Style>
+
+  <!-- Text -->
+  <Style Selector="TextBlock.dim">
+    <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
+  </Style>
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}" />
+  </Style>
+  <Style Selector="TextBlock.hint">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+  <Style Selector="TextBlock.heading">
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="FontSize" Value="15" />
+  </Style>
+  <Style Selector="TextBlock.mono">
+    <Setter Property="FontFamily" Value="Menlo,Consolas,monospace" />
+  </Style>
+
+  <!-- Surfaces -->
+  <Style Selector="Border.bar">
+    <Setter Property="Background" Value="{DynamicResource BarBackgroundBrush}" />
+    <Setter Property="Padding" Value="8,6" />
+  </Style>
+  <Style Selector="Border.panel">
+    <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+    <Setter Property="BorderThickness" Value="1,0,0,0" />
+  </Style>
+  <Style Selector="Border.banner">
+    <Setter Property="Padding" Value="12,8" />
+  </Style>
+  <Style Selector="Border.banner.error">
+    <Setter Property="Background" Value="{DynamicResource ErrorBackgroundBrush}" />
+  </Style>
+  <Style Selector="Border.banner.error TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource ErrorForegroundBrush}" />
+  </Style>
+  <Style Selector="Border.banner.warning">
+    <Setter Property="Background" Value="{DynamicResource WarningBackgroundBrush}" />
+  </Style>
+  <Style Selector="Border.banner.warning TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource WarningForegroundBrush}" />
+  </Style>
+  <Style Selector="StackPanel.tab">
+    <Setter Property="Margin" Value="4,14,4,0" />
+  </Style>
+
+  <!--
+    Icon-only buttons: a Path with Lucide geometry as content, tooltip for the name.
+    Both selectors are needed: type selectors match exactly, so Button.icon does not match a ToggleButton.
+    Focusable=False because Space is a window KeyBinding; a focused button would fire it twice.
+  -->
+  <Style Selector="Button.icon, ToggleButton.icon">
+    <Setter Property="Width" Value="34" />
+    <Setter Property="Height" Value="30" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="ToolTip.Placement" Value="Bottom" />
+  </Style>
+  <Style Selector="Button.icon Path, ToggleButton.icon Path">
+    <!-- Lucide is drawn for 24px; Stretch=None keeps every icon at the same optical size and the stroke unclipped. -->
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Stretch" Value="None" />
+    <Setter Property="Stroke" Value="{DynamicResource IconBrush}" />
+    <Setter Property="StrokeThickness" Value="2" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="StrokeJoin" Value="Round" />
+    <Setter Property="Fill" Value="Transparent" />
+    <Setter Property="RenderTransform" Value="scale(0.8)" />
+  </Style>
+  <Style Selector="Button.icon:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.icon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}" />
+  </Style>
+  <Style Selector="Button.icon:pressed /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.icon:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ControlPressedBrush}" />
+  </Style>
+  <Style Selector="Button.icon:disabled /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.icon:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.icon:disabled Path, ToggleButton.icon:disabled Path">
+    <Setter Property="Stroke" Value="{DynamicResource IconDisabledBrush}" />
+  </Style>
+  <Style Selector="ToggleButton.icon:checked /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ControlCheckedBrush}" />
+  </Style>
+  <Style Selector="ToggleButton.icon:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ControlCheckedHoverBrush}" />
+  </Style>
+  <Style Selector="ToggleButton.icon:checked Path">
+    <Setter Property="Stroke" Value="{DynamicResource AccentHoverBrush}" />
+  </Style>
+
+  <!-- The one accent icon button (Export). -->
+  <Style Selector="Button.icon.accent /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+  </Style>
+  <Style Selector="Button.icon.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+  </Style>
+  <Style Selector="Button.icon.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}" />
+  </Style>
+  <Style Selector="Button.icon.accent:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentDisabledBrush}" />
+  </Style>
+  <Style Selector="Button.icon.accent Path">
+    <Setter Property="Stroke" Value="{DynamicResource IconOnAccentBrush}" />
+  </Style>
+  <Style Selector="Button.icon.accent:disabled Path">
+    <Setter Property="Stroke" Value="{DynamicResource TextDimBrush}" />
+  </Style>
+
+  <!-- Large decorative icon (empty state) -->
+  <Style Selector="Path.illustration">
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Stretch" Value="None" />
+    <Setter Property="Stroke" Value="{DynamicResource TextMutedBrush}" />
+    <Setter Property="StrokeThickness" Value="1.5" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="StrokeJoin" Value="Round" />
+    <Setter Property="Fill" Value="Transparent" />
+    <Setter Property="RenderTransform" Value="scale(2)" />
+    <Setter Property="Margin" Value="0,0,0,20" />
+  </Style>
+
+</Styles>

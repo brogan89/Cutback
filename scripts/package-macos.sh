@@ -34,6 +34,10 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$out_dir"
 cp -R "$publish_dir"/. "$app/Contents/MacOS/"
 chmod +x "$app/Contents/MacOS/Cutback"
 
+# Only code may live in Contents/MacOS: codesign rejects the bundle if the ggml Metal shader
+# source sits there. Resources is also where ggml's [NSBundle mainBundle] lookup finds it.
+find "$app/Contents/MacOS" -maxdepth 1 -name '*.metal' -exec mv {} "$app/Contents/Resources/" \;
+
 sed -e "s/__VERSION__/$short_version/g" "$repo/packaging/macos/Info.plist" > "$app/Contents/Info.plist"
 printf 'APPL????' > "$app/Contents/PkgInfo"
 plutil -lint "$app/Contents/Info.plist"

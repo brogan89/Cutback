@@ -48,10 +48,12 @@ public sealed class TranscriptControl : Control
     private const double DragThreshold = 4;
 
     private static readonly Typeface Font = new(FontFamily.Default);
-    private static readonly IBrush KeptBrush = new SolidColorBrush(Color.Parse("#E4E4EA"));
-    private static readonly IBrush CutBrush = new SolidColorBrush(Color.Parse("#6A6A75"));
-    private static readonly IBrush CurrentBrush = new SolidColorBrush(Color.Parse("#3A5A8C"));
-    private static readonly IBrush SelectionBrush = new SolidColorBrush(Color.Parse("#4F7BD1"), 0.55);
+
+    // Fallbacks for the previewer; the real values come from Styles/Theme.axaml on attach.
+    private IBrush _keptBrush = new SolidColorBrush(Color.Parse("#E6E6EC"));
+    private IBrush _cutBrush = new SolidColorBrush(Color.Parse("#6A6A75"));
+    private IBrush _currentBrush = new SolidColorBrush(Color.Parse("#2F4F82"));
+    private IBrush _selectionBrush = new SolidColorBrush(Color.Parse("#5B8DEF"), 0.55);
 
     private string _text = string.Empty;
     private int[] _wordStarts = [];
@@ -201,6 +203,23 @@ public sealed class TranscriptControl : Control
         InvalidateVisual();
     }
 
+    // ---- theme --------------------------------------------------------------------------------
+
+    /// <summary>Brushes come from Styles/Theme.axaml, reachable through the window once the control is in the tree.</summary>
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _keptBrush = ResolveBrush("TranscriptKeptBrush", _keptBrush);
+        _cutBrush = ResolveBrush("TranscriptCutBrush", _cutBrush);
+        _currentBrush = ResolveBrush("TranscriptCurrentBrush", _currentBrush);
+        _selectionBrush = ResolveBrush("TranscriptSelectionBrush", _selectionBrush);
+        _layout = null; // the layout captured the old brushes
+        InvalidateVisual();
+    }
+
+    private IBrush ResolveBrush(string key, IBrush fallback) =>
+        this.TryFindResource(key, out var value) && value is IBrush brush ? brush : fallback;
+
     // ---- layout -------------------------------------------------------------------------------
 
     private TextLayout EnsureLayout(double width)
@@ -215,7 +234,7 @@ public sealed class TranscriptControl : Control
             Font,
             fontRenderingEmSize: FontSize,
             textDecorations: TextDecorations.Strikethrough,
-            foregroundBrush: CutBrush);
+            foregroundBrush: _cutBrush);
         var overrides = new List<ValueSpan<TextRunProperties>>();
         for (var i = 0; i < _wordStarts.Length; i++)
         {
@@ -229,7 +248,7 @@ public sealed class TranscriptControl : Control
             _text,
             Font,
             FontSize,
-            KeptBrush,
+            _keptBrush,
             textWrapping: TextWrapping.Wrap,
             maxWidth: maxWidth,
             lineHeight: LineHeight,
@@ -272,7 +291,7 @@ public sealed class TranscriptControl : Control
         {
             foreach (var rect in WordRects(layout, Math.Min(_selectionAnchor, _selectionEnd), Math.Max(_selectionAnchor, _selectionEnd)))
             {
-                context.FillRectangle(SelectionBrush, rect);
+                context.FillRectangle(_selectionBrush, rect);
             }
         }
 
@@ -281,7 +300,7 @@ public sealed class TranscriptControl : Control
         {
             foreach (var rect in WordRects(layout, current, current))
             {
-                context.FillRectangle(CurrentBrush, rect);
+                context.FillRectangle(_currentBrush, rect);
             }
         }
 

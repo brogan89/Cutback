@@ -1,13 +1,15 @@
 name: Release
 
 # Releases are manual: run this workflow from the Actions tab with a version and tick "publish"
-# to create the tag and GitHub Release. Every merge to main runs the same pipeline as a dry run
-# (archives uploaded as workflow artifacts, nothing published) so packaging breakage shows up
-# before the next release.
+# to create the tag and GitHub Release. Every pull request and every merge to main runs the same
+# pipeline as a dry run (archives uploaded as workflow artifacts, nothing published) so packaging
+# breakage blocks the PR rather than the next release. The per-RID build jobs are required status
+# checks on main.
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
     inputs:
       version:
@@ -23,7 +25,8 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  # A newer push to a PR supersedes its dry run; a real release must never be cancelled mid-way.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   DOTNET_NOLOGO: true
@@ -72,19 +75,25 @@ jobs:
         include:
           # VideoLAN.LibVLC.Windows is only referenced when the build host is Windows,
           # so win-x64 must be published on a Windows runner.
+          # `whisper` is the folder Whisper.net.Runtime uses under runtimes/ for that platform;
+          # its names are not .NET RIDs (macos-arm64, not osx-arm64).
           - os: windows-latest
             rid: win-x64
+            whisper: win-x64
             natives: true
           - os: ubuntu-latest
             rid: linux-x64
+            whisper: linux-x64
             natives: true
           # Inside an .app bundle loose dylibs are what codesign expects, so do not self-extract.
           - os: macos-latest
             rid: osx-arm64
+            whisper: macos-arm64
             natives: false
     env:
       VERSION: ${{ needs.version.outputs.version }}
       RID: ${{ matrix.rid }}
+      WHISPER_RUNTIME: ${{ matrix.whisper }}
     steps:
       - name: Keep LF line endings
         if: runner.os == 'Windows'
@@ -110,6 +119,24 @@ jobs:
             -p:Version="$VERSION" \
             -p:ContinuousIntegrationBuild=true \
             -o "artifacts/publish/$RID"
+
+      # Whisper.net.Runtime copies its native libraries for every platform into runtimes/, even
+      # for a RID-specific publish. Besides the bloat, codesign refuses a macOS bundle that
+      # contains foreign .so files, so drop every folder but this platform's. Where natives
+      # self-extract (Windows, Linux) the single-file bundler has already absorbed this
+      # platform's folder, so only foreign ones are left loose; on macOS it stays on disk.
+      - name: Drop other platforms' Whisper natives
+        shell: bash
+        run: |
+          runtimes="artifacts/publish/$RID/runtimes"
+          for dir in "$runtimes"/*/; do
+            dir=${dir%/}
+            if [[ "$(basename "$dir")" != "$WHISPER_RUNTIME" ]]; then
+              rm -rf "$dir"
+            fi
+          done
+          rmdir "$runtimes" 2>/dev/null || true
+          echo "Remaining under $runtimes:"; ls -R "$runtimes" 2>/dev/null || echo "(none; natives are inside the single-file bundle)"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'

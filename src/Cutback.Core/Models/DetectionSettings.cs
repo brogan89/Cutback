@@ -1,6 +1,6 @@
 namespace Cutback.Core.Models;
 
-/// <summary>Parameters for automatic silence detection. Stored per project.</summary>
+/// <summary>Parameters for automatic silence detection. Edited per user; a project records the values its last run used.</summary>
 /// <param name="PaddingMs">Extra kept audio on each side of a cut so consonants are not clipped.</param>
 /// <param name="MinSilenceMs">Silences shorter than this are not cut.</param>
 /// <param name="SilenceThresholdDb">Level below which audio counts as silence.</param>

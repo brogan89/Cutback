@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Cutback.Analysis;
 using Cutback.Core.Detection;
+using Cutback.Core.Models;
 
 namespace Cutback.App.Services;
 
@@ -50,6 +51,13 @@ public sealed class AppSettingsStore
         RecentFiles = settings.RecentFiles ?? [],
         WhisperModel = WhisperModelInfo.For(WhisperModelInfo.Parse(settings.WhisperModel)).Key,
         FillerWords = SanitizeFillerWords(settings.FillerWords),
+        // Math.Clamp(NaN, ...) is NaN, and NaN would go straight into an ffmpeg filter string.
+        SilenceThresholdDb = double.IsFinite(settings.SilenceThresholdDb)
+            ? Math.Clamp(settings.SilenceThresholdDb, AppSettings.MinSilenceThresholdDb, AppSettings.MaxSilenceThresholdDb)
+            : DetectionSettings.Default.SilenceThresholdDb,
+        MinSilenceMs = Math.Clamp(settings.MinSilenceMs, AppSettings.MinMinSilenceMs, AppSettings.MaxMinSilenceMs),
+        PaddingMs = Math.Clamp(settings.PaddingMs, AppSettings.MinPaddingMs, AppSettings.MaxPaddingMs),
+        MinKeepMs = Math.Clamp(settings.MinKeepMs, AppSettings.MinMinKeepMs, AppSettings.MaxMinKeepMs),
     };
 
     /// <summary>Normalised, de-duplicated filler words, or the defaults when nothing usable remains.</summary>

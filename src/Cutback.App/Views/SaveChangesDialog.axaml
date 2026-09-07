@@ -6,10 +6,10 @@
         CanResize="False"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="#242429">
+        Classes="dialog">
   <StackPanel Margin="20" Spacing="16">
     <TextBlock x:Name="Message" TextWrapping="Wrap" FontSize="14" />
-    <TextBlock Text="Your changes will be lost if you don't save them." Foreground="#9A9AA6" TextWrapping="Wrap" />
+    <TextBlock Text="Your changes will be lost if you don't save them." Classes="dim" TextWrapping="Wrap" />
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button x:Name="DiscardButton" Content="Don't Save" MinWidth="90" />
       <Button x:Name="CancelButton" Content="Cancel" MinWidth="90" IsCancel="True" />
