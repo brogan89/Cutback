@@ -387,7 +387,6 @@ public sealed class TranscriptControl : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
-        e.Pointer.Capture(null);
         if (_pressWord < 0)
         {
             return;
@@ -399,6 +398,10 @@ public sealed class TranscriptControl : Control
 
         _pressWord = _selectionAnchor = _selectionEnd = -1;
         _dragging = false;
+
+        // Capture(null) raises PointerCaptureLost synchronously, and its handler resets the
+        // selection fields above, so state must be read and cleared before releasing capture.
+        e.Pointer.Capture(null);
         e.Handled = true;
 
         CutWords(first, last, anchor);
@@ -408,6 +411,12 @@ public sealed class TranscriptControl : Control
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
+        if (_pressWord < 0)
+        {
+            // Re-entrant call from OnPointerReleased's own Capture(null): no gesture is active.
+            return;
+        }
+
         _pressWord = _selectionAnchor = _selectionEnd = -1;
         _dragging = false;
         InvalidateVisual();
