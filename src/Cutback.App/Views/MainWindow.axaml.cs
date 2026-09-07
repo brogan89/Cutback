@@ -40,6 +40,9 @@ public partial class MainWindow : Window
         // Preferences (Cmd+, / Ctrl+,) gets no label: Avalonia renders the key as "OemComma".
         UndoMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Z");
         RedoMenuItem.InputGesture = KeyGesture.Parse($"{mod}+Shift+Z");
+
+        // Icon buttons carry their name in the tooltip; only Export has a shortcut worth showing.
+        ToolTip.SetTip(ExportButton, $"Export… ({mod}+E)");
     }
 
     /// <summary>Unsaved changes get a Save / Don't Save / Cancel prompt before the window closes.</summary>

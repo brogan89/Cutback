@@ -21,6 +21,8 @@ with kept regions highlighted and removed regions greyed out. You can toggle any
 boundaries, and export the result. Editing is non-destructive and the source file is never
 modified.
 
+![Cutback editing a screen recording: the transcript panel with struck-through filler words beside the video, and the waveform timeline below with removed regions greyed out](docs/screenshot.png)
+
 **Status:** Phase 1 (MVP) in progress. See [Roadmap](#roadmap).
 
 ## Installing a release
@@ -166,8 +168,9 @@ for any branch.
 ## Using it
 
 1. **Open a video** (button, drag-and-drop, or pass the path on the command line).
-2. **Detect silence.** Tune threshold, minimum silence, padding and minimum keep in *Detection
-   settings* and run again; your own edits are never overwritten.
+2. **Detect silence.** Tune threshold, minimum silence, padding and minimum keep in *File ›
+   Preferences › Silence detection* and run again; your own edits are never overwritten. Toolbar
+   buttons are icons; hover one for its name.
 3. **Adjust on the timeline.** Click a segment to keep or remove it, drag a boundary to move it
    (it snaps to the quietest nearby point), drag in the ruler to scrub, scroll to zoom, drag to pan.
    Space plays and pauses; playback skips removed regions.

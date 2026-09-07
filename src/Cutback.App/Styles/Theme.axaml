@@ -1,0 +1,105 @@
+<!--
+  The palette. Every colour the app uses lives here, named by role; views and controls must not
+  contain hex literals. The app is dark-only (App.axaml sets RequestedThemeVariant="Dark"), so these
+  are plain resources rather than ThemeDictionaries.
+
+  Skia-drawn controls (TimelineControl) resolve the Timeline* colours with TryFindResource when
+  they attach to the tree; XAML uses the *Brush wrappers below.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Surfaces -->
+  <Color x:Key="WindowBackgroundColor">#141417</Color>
+  <Color x:Key="BarBackgroundColor">#1E1E23</Color>
+  <Color x:Key="PanelBackgroundColor">#1A1A1F</Color>
+  <Color x:Key="BorderColor">#2A2A31</Color>
+  <Color x:Key="VideoBackgroundColor">#000000</Color>
+
+  <!-- Text -->
+  <Color x:Key="TextPrimaryColor">#E6E6EC</Color>
+  <Color x:Key="TextDimColor">#9A9AA6</Color>
+  <Color x:Key="TextMutedColor">#6A6A75</Color>
+  <Color x:Key="TextPlaceholderColor">#C8C8D0</Color>
+
+  <!-- Accent. All seven Fluent keys are set so the OS accent never leaks through. -->
+  <Color x:Key="SystemAccentColor">#5B8DEF</Color>
+  <Color x:Key="SystemAccentColorLight1">#78A2F3</Color>
+  <Color x:Key="SystemAccentColorLight2">#96B7F6</Color>
+  <Color x:Key="SystemAccentColorLight3">#B8CDF9</Color>
+  <Color x:Key="SystemAccentColorDark1">#4A76CC</Color>
+  <Color x:Key="SystemAccentColorDark2">#3A5FA8</Color>
+  <Color x:Key="SystemAccentColorDark3">#2C4880</Color>
+
+  <!-- Interaction states for flat (icon) buttons -->
+  <Color x:Key="ControlHoverColor">#14FFFFFF</Color>
+  <Color x:Key="ControlPressedColor">#24FFFFFF</Color>
+  <Color x:Key="ControlCheckedColor">#405B8DEF</Color>
+  <Color x:Key="ControlCheckedHoverColor">#585B8DEF</Color>
+
+  <!-- Banners -->
+  <Color x:Key="ErrorBackgroundColor">#4A1C22</Color>
+  <Color x:Key="ErrorForegroundColor">#FFD9DD</Color>
+  <Color x:Key="WarningBackgroundColor">#4A3D18</Color>
+  <Color x:Key="WarningForegroundColor">#FFEFC4</Color>
+
+  <!-- Timeline (resolved by TimelineControl; keep the key names in sync with its Palette) -->
+  <Color x:Key="TimelineRulerBackground">#18181C</Color>
+  <Color x:Key="TimelineBodyBackground">#121215</Color>
+  <Color x:Key="TimelineKeptBackground">#1D2E4D</Color>
+  <Color x:Key="TimelineKeptBackgroundHover">#26406A</Color>
+  <Color x:Key="TimelineRemovedBackground">#1F1F24</Color>
+  <Color x:Key="TimelineRemovedBackgroundHover">#2A2A31</Color>
+  <Color x:Key="TimelineKeptWave">#6FA3F0</Color>
+  <Color x:Key="TimelineRemovedWave">#45454E</Color>
+  <Color x:Key="TimelineBoundary">#B0C8C8D2</Color>
+  <Color x:Key="TimelineBoundaryActive">#FFD166</Color>
+  <Color x:Key="TimelineSectionFill">#38FFD166</Color>
+  <Color x:Key="TimelinePlayhead">#FF5C5C</Color>
+  <Color x:Key="TimelineTick">#4E4E58</Color>
+  <Color x:Key="TimelineLabel">#9A9AA6</Color>
+  <Color x:Key="TimelineReasonText">#7C7C88</Color>
+  <Color x:Key="TimelineHint">#60606A</Color>
+
+  <!-- Transcript (resolved by TranscriptControl) -->
+  <SolidColorBrush x:Key="TranscriptKeptBrush" Color="{StaticResource TextPrimaryColor}" />
+  <SolidColorBrush x:Key="TranscriptCutBrush" Color="{StaticResource TextMutedColor}" />
+  <SolidColorBrush x:Key="TranscriptCurrentBrush" Color="#2F4F82" />
+  <SolidColorBrush x:Key="TranscriptSelectionBrush" Color="{StaticResource SystemAccentColor}" Opacity="0.55" />
+
+  <!-- Brushes for XAML -->
+  <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource WindowBackgroundColor}" />
+  <SolidColorBrush x:Key="BarBackgroundBrush" Color="{StaticResource BarBackgroundColor}" />
+  <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{StaticResource PanelBackgroundColor}" />
+  <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
+  <SolidColorBrush x:Key="VideoBackgroundBrush" Color="{StaticResource VideoBackgroundColor}" />
+  <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
+  <SolidColorBrush x:Key="TextDimBrush" Color="{StaticResource TextDimColor}" />
+  <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" />
+  <SolidColorBrush x:Key="TextPlaceholderBrush" Color="{StaticResource TextPlaceholderColor}" />
+  <SolidColorBrush x:Key="IconBrush" Color="{StaticResource TextPrimaryColor}" />
+  <SolidColorBrush x:Key="IconDisabledBrush" Color="{StaticResource TextMutedColor}" />
+  <SolidColorBrush x:Key="IconOnAccentBrush" Color="#FFFFFF" />
+  <SolidColorBrush x:Key="ControlHoverBrush" Color="{StaticResource ControlHoverColor}" />
+  <SolidColorBrush x:Key="ControlPressedBrush" Color="{StaticResource ControlPressedColor}" />
+  <SolidColorBrush x:Key="ControlCheckedBrush" Color="{StaticResource ControlCheckedColor}" />
+  <SolidColorBrush x:Key="ControlCheckedHoverBrush" Color="{StaticResource ControlCheckedHoverColor}" />
+  <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource SystemAccentColor}" />
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource SystemAccentColorLight1}" />
+  <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource SystemAccentColorDark1}" />
+  <SolidColorBrush x:Key="AccentDisabledBrush" Color="{StaticResource SystemAccentColorDark3}" />
+  <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="{StaticResource ErrorBackgroundColor}" />
+  <SolidColorBrush x:Key="ErrorForegroundBrush" Color="{StaticResource ErrorForegroundColor}" />
+  <SolidColorBrush x:Key="WarningBackgroundBrush" Color="{StaticResource WarningBackgroundColor}" />
+  <SolidColorBrush x:Key="WarningForegroundBrush" Color="{StaticResource WarningForegroundColor}" />
+
+  <!-- Fluent overrides -->
+  <x:Double x:Key="TabItemHeaderFontSize">14</x:Double>
+  <Thickness x:Key="TabItemHeaderMargin">10,0,10,0</Thickness>
+  <x:Double x:Key="TabItemMinHeight">36</x:Double>
+  <SolidColorBrush x:Key="ToolTipBackground" Color="#2A2A31" />
+  <SolidColorBrush x:Key="ToolTipForeground" Color="{StaticResource TextPrimaryColor}" />
+  <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#3A3A42" />
+  <x:Double x:Key="ToolTipContentThemeFontSize">12</x:Double>
+
+</ResourceDictionary>
