@@ -1,13 +1,15 @@
 name: Release
 
 # Releases are manual: run this workflow from the Actions tab with a version and tick "publish"
-# to create the tag and GitHub Release. Every merge to main runs the same pipeline as a dry run
-# (archives uploaded as workflow artifacts, nothing published) so packaging breakage shows up
-# before the next release.
+# to create the tag and GitHub Release. Every pull request and every merge to main runs the same
+# pipeline as a dry run (archives uploaded as workflow artifacts, nothing published) so packaging
+# breakage blocks the PR rather than the next release. The per-RID build jobs are required status
+# checks on main.
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
     inputs:
       version:
@@ -23,7 +25,8 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  # A newer push to a PR supersedes its dry run; a real release must never be cancelled mid-way.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   DOTNET_NOLOGO: true
