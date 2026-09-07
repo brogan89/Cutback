@@ -12,7 +12,8 @@ Keep this file current: every new package must be added here with its licence be
 | FFMpegCore | 5.4.0 | MIT | Cutback.Media |
 | Whisper.net | 1.9.1 | MIT | Cutback.Analysis |
 | Whisper.net.Runtime (bundles whisper.cpp and ggml) | 1.9.1 | MIT (whisper.cpp MIT, ggml MIT) | Cutback.Analysis |
-| Microsoft.Extensions.AI.Abstractions, Microsoft.Bcl.AsyncInterfaces (transitive via Whisper.net) | 10.2.0 / 10.0.7 | MIT | Cutback.Analysis |
+| Whisper.net.Runtime.Metal | 1.9.1 | MIT | Cutback.Analysis, pulled in transitively by Whisper.net.Runtime; used on macOS |
+| Microsoft.Extensions.AI.Abstractions (transitive via Whisper.net) | 10.2.0 | MIT | Cutback.Analysis |
 | LibVLCSharp, LibVLCSharp.Avalonia | 3.10.1 | LGPL-2.1-or-later | Cutback.App |
 | VideoLAN.LibVLC.Windows | 3.0.23.1 | LGPL-2.1-or-later (libVLC) | Cutback.App, Windows only |
 | SkiaSharp (transitive via Avalonia.Skia) | 2.88.9 | MIT | Cutback.App |
