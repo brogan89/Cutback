@@ -387,6 +387,7 @@ public sealed class TranscriptControl : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        e.Pointer.Capture(null);
         if (_pressWord < 0)
         {
             return;
@@ -398,10 +399,17 @@ public sealed class TranscriptControl : Control
 
         _pressWord = _selectionAnchor = _selectionEnd = -1;
         _dragging = false;
-        e.Pointer.Capture(null);
         e.Handled = true;
 
         CutWords(first, last, anchor);
+        InvalidateVisual();
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _pressWord = _selectionAnchor = _selectionEnd = -1;
+        _dragging = false;
         InvalidateVisual();
     }
 
