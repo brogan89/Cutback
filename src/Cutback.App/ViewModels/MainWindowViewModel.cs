@@ -242,6 +242,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             StatusMessage = "Transcription cancelled.";
             return false;
         }
+        catch (ModelLoadException ex)
+        {
+            _models.Delete(model);
+            ErrorMessage = ex.Message;
+            return false;
+        }
+        catch (DllNotFoundException ex)
+        {
+            ErrorMessage = "The speech recognition library could not be loaded. " + ex.Message;
+            return false;
+        }
         catch (Exception ex) when (ex is FfmpegNotFoundException or FfmpegException or ModelDownloadException or IOException)
         {
             ErrorMessage = ex.Message;

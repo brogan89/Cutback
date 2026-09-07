@@ -45,7 +45,7 @@ public sealed class WhisperTranscriber : ITranscriber
 
     private async Task<List<Word>> RecognizeAsync(ReadOnlyMemory<float> samples, IProgress<double>? progress, CancellationToken cancellationToken)
     {
-        using var factory = WhisperFactory.FromPath(_modelPath);
+        using var factory = LoadFactory();
         await using var processor = factory.CreateBuilder()
             .WithLanguage("en")
             .WithTokenTimestamps()
@@ -69,6 +69,22 @@ public sealed class WhisperTranscriber : ITranscriber
 
         words.Sort((a, b) => a.Start.CompareTo(b.Start));
         return words;
+    }
+
+    /// <summary>Loads the Whisper model, wrapping any failure in a <see cref="ModelLoadException"/> naming the model path.</summary>
+    private WhisperFactory LoadFactory()
+    {
+        try
+        {
+            return WhisperFactory.FromPath(_modelPath);
+        }
+        catch (Exception ex)
+        {
+            throw new ModelLoadException(
+                $"The speech model at {_modelPath} could not be loaded. It may be corrupt; it will be downloaded again next time.",
+                _modelPath,
+                ex);
+        }
     }
 
     /// <summary>Maps a child's <c>[0, 1]</c> onto <c>[offset, offset + share]</c> of the parent's.</summary>

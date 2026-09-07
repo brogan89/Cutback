@@ -48,10 +48,10 @@ public sealed class ModelStore
                 .GetGgmlModelAsync(info.GgmlType, QuantizationType.NoQuantization, cancellationToken)
                 .ConfigureAwait(false);
 
+            long received = 0;
             await using (var target = new FileStream(partial, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
             {
                 var buffer = new byte[1 << 16];
-                long received = 0;
                 int read;
                 while ((read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
                 {
@@ -61,14 +61,30 @@ public sealed class ModelStore
                 }
             }
 
+            if (received < info.ApproximateBytes * 0.9)
+            {
+                TryDelete(partial);
+                throw new ModelDownloadException(
+                    $"The download of {info.Key} ended early ({received} of about {info.ApproximateBytes} bytes). "
+                    + "Check your connection and try again.");
+            }
+
             File.Move(partial, path, overwrite: true);
             progress?.Report(1.0);
             return path;
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             TryDelete(partial);
             throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            TryDelete(partial);
+            throw new ModelDownloadException(
+                $"Could not download the {info.Key} speech model (about {info.ApproximateBytes / 1_000_000} MB). "
+                + $"Check your internet connection and try again. Models are cached in {CacheDirectory}.\n\n{ex.Message}",
+                ex);
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or UnauthorizedAccessException)
         {
@@ -79,6 +95,9 @@ public sealed class ModelStore
                 ex);
         }
     }
+
+    /// <summary>Removes the cached model file for <paramref name="model"/>, if one is present.</summary>
+    public void Delete(WhisperModel model) => TryDelete(PathFor(model));
 
     private static void TryDelete(string path)
     {

@@ -78,4 +78,20 @@ public sealed class ModelStoreTests : IDisposable
         (await act.Should().ThrowAsync<ModelDownloadException>())
             .Which.Message.Should().Contain("tiny.en").And.Contain(_dir);
     }
+
+    [Fact]
+    public void Delete_removes_the_cached_model_and_is_a_no_op_when_absent()
+    {
+        var store = new ModelStore(_dir);
+        Directory.CreateDirectory(_dir);
+        File.WriteAllBytes(store.PathFor(WhisperModel.BaseEn), [1, 2, 3]);
+
+        store.Delete(WhisperModel.BaseEn);
+
+        store.IsDownloaded(WhisperModel.BaseEn).Should().BeFalse();
+
+        var act = () => store.Delete(WhisperModel.BaseEn);
+
+        act.Should().NotThrow();
+    }
 }
