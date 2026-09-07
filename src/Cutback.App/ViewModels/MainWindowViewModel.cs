@@ -707,6 +707,39 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         Edit(s => s.SetRange(range.Start, range.End, enabled));
     }
 
+    /// <summary>
+    /// A click or drag in the transcript. The run takes the opposite state of the anchor word:
+    /// clicking a kept word cuts it, clicking a struck word restores it. Marked manual, like a
+    /// section drawn on the timeline, and one undo step.
+    /// </summary>
+    [RelayCommand]
+    private void CutWords(WordRange range)
+    {
+        if (Segments is null || Transcript.Count == 0)
+        {
+            return;
+        }
+
+        var lastIndex = Transcript.Count - 1;
+        var first = Math.Clamp(Math.Min(range.First, range.Last), 0, lastIndex);
+        var last = Math.Clamp(Math.Max(range.First, range.Last), 0, lastIndex);
+        var anchor = Math.Clamp(range.Anchor, first, last);
+
+        var enabled = TranscriptView.IsCut(Transcript[anchor], Segments.Segments);
+        var (start, end) = SnapWordSpan(Transcript[first].Start, Transcript[last].End);
+        Edit(s => s.SetRange(start, end, enabled));
+    }
+
+    /// <summary>Cmd/Ctrl+click or "Play from here" in the transcript.</summary>
+    [RelayCommand]
+    private void SeekToWord(int index)
+    {
+        if (index >= 0 && index < Transcript.Count)
+        {
+            Seek(Transcript[index].Start);
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private void Undo()
     {
