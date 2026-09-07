@@ -6,7 +6,11 @@ namespace Cutback.Core.Detection;
 /// Turns filler-word spans into cuts that respect the user's existing edits: manual segments are
 /// never touched, spans already inside a cut are dropped, overlapping spans merge, and kept
 /// slivers shorter than the minimum keep length between a span and any neighbouring cut are
-/// bridged so a filler next to a silence cut does not leave a stutter. Pure.
+/// bridged so a filler next to a silence cut does not leave a stutter. A previous run's
+/// <see cref="SegmentOrigin.Filler"/> cuts are ignored entirely — both as "already cut" and as
+/// bridge targets — because <see cref="SegmentList.ApplyFillerCuts"/> dissolves them before
+/// carving the cuts this method returns, so treating them as still there would either drop a span
+/// that is about to lose its cut or stretch a new span onto an edge that is about to vanish. Pure.
 /// </summary>
 public static class FillerCutPlanner
 {
@@ -47,8 +51,8 @@ public static class FillerCutPlanner
         }
 
         // 3. Bridge short kept slivers to the neighbouring existing cut or timeline end.
-        var disabledEnds = current.Where(s => !s.Enabled).Select(s => s.End).Append(0.0).ToList();
-        var disabledStarts = current.Where(s => !s.Enabled).Select(s => s.Start).Append(duration).ToList();
+        var disabledEnds = current.Where(s => !s.Enabled && s.Origin != SegmentOrigin.Filler).Select(s => s.End).Append(0.0).ToList();
+        var disabledStarts = current.Where(s => !s.Enabled && s.Origin != SegmentOrigin.Filler).Select(s => s.Start).Append(duration).ToList();
         for (var i = 0; i < merged.Count; i++)
         {
             var span = merged[i];
@@ -91,7 +95,12 @@ public static class FillerCutPlanner
     private static bool IntersectsManual(IReadOnlyList<Segment> segments, double start, double end)
         => segments.Any(s => s.Origin == SegmentOrigin.Manual && s.Start < end && s.End > start);
 
-    /// <summary>True when every segment overlapping <c>[start, end)</c> is disabled. Segments partition the timeline, so this means the whole span is cut.</summary>
+    /// <summary>
+    /// True when every segment overlapping <c>[start, end)</c> is disabled and not a previous
+    /// <see cref="SegmentOrigin.Filler"/> cut (those are about to be dissolved and replaced, so
+    /// they must not count as already cut). Segments partition the timeline, so ignoring the
+    /// origin check, this means the whole span is cut.
+    /// </summary>
     private static bool IsAlreadyCut(IReadOnlyList<Segment> segments, double start, double end)
-        => segments.Where(s => s.Start < end && s.End > start).All(s => !s.Enabled);
+        => segments.Where(s => s.Start < end && s.End > start).All(s => !s.Enabled && s.Origin != SegmentOrigin.Filler);
 }

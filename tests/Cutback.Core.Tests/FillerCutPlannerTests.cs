@@ -116,4 +116,34 @@ public sealed class FillerCutPlannerTests
 
         cuts.Select(c => c.Start).Should().BeInAscendingOrder();
     }
+
+    [Fact]
+    public void A_span_inside_a_previous_filler_cut_is_planned_again()
+    {
+        // Second run: the old filler cut is about to be dissolved by ApplyFillerCuts, so it must not count as "already cut".
+        var current = Partition((0.0, 2.0, true, SegmentOrigin.Auto), (2.0, 2.3, false, SegmentOrigin.Filler), (2.3, Duration, true, SegmentOrigin.Auto));
+
+        var cuts = FillerCutPlanner.Plan([Span(2.0, 2.3)], current, Settings, Duration);
+
+        cuts.Should().ContainSingle().Which.Should().Be(new PlannedCut(2.0, 2.3, "filler: um"));
+    }
+
+    [Fact]
+    public void A_span_inside_an_auto_silence_cut_is_still_dropped()
+    {
+        var current = Partition((0.0, 2.0, true, SegmentOrigin.Auto), (2.0, 3.0, false, SegmentOrigin.Auto), (3.0, Duration, true, SegmentOrigin.Auto));
+
+        FillerCutPlanner.Plan([Span(2.2, 2.5)], current, Settings, Duration).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_previous_filler_cut_is_not_a_bridge_target()
+    {
+        // Old filler cut at 2.0..2.3 will vanish; a new span 50 ms after it must not be stretched back to 2.3.
+        var current = Partition((0.0, 2.0, true, SegmentOrigin.Auto), (2.0, 2.3, false, SegmentOrigin.Filler), (2.3, Duration, true, SegmentOrigin.Auto));
+
+        var cuts = FillerCutPlanner.Plan([Span(2.35, 2.6, "uh")], current, Settings, Duration);
+
+        cuts.Should().ContainSingle().Which.Should().Be(new PlannedCut(2.35, 2.6, "filler: uh"));
+    }
 }

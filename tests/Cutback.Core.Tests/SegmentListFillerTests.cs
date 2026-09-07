@@ -134,4 +134,21 @@ public sealed class SegmentListFillerTests
 
         raised.Should().Be(0);
     }
+
+    [Fact]
+    public void Planning_against_the_current_partition_and_applying_twice_keeps_the_same_cuts()
+    {
+        var list = new SegmentList(Duration);
+        var settings = DetectionSettings.Default;
+        FillerSpan[] spans = [new(2.0, 2.3, "um"), new(5.0, 5.4, "uh")];
+
+        list.ApplyFillerCuts(FillerCutPlanner.Plan(spans, list.Segments, settings, Duration));
+        var first = list.Segments.Select(s => (s.Start, s.End, s.Enabled, s.Origin)).ToList();
+
+        list.ApplyFillerCuts(FillerCutPlanner.Plan(spans, list.Segments, settings, Duration));
+
+        list.Segments.Select(s => (s.Start, s.End, s.Enabled, s.Origin)).Should().Equal(first);
+        list.Segments.Where(s => !s.Enabled).Should().HaveCount(2);
+        list.ShouldBeValidPartitionOf(Duration);
+    }
 }
