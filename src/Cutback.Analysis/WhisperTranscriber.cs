@@ -67,8 +67,7 @@ public sealed class WhisperTranscriber : ITranscriber
                 new TokenTiming(t.Text ?? string.Empty, t.Start / 100.0, t.End / 100.0, t.Probability))));
         }
 
-        words.Sort((a, b) => a.Start.CompareTo(b.Start));
-        return words;
+        return words.OrderBy(w => w.Start).ToList();
     }
 
     /// <summary>Loads the Whisper model, wrapping any failure in a <see cref="ModelLoadException"/> naming the model path.</summary>

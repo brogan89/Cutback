@@ -322,7 +322,7 @@ public sealed class ProjectSerializerTests
     }
 
     [Fact]
-    public void Default_migrator_targets_the_current_version_with_no_steps_yet()
+    public void Default_migrator_applies_no_steps_to_a_current_version_document()
     {
         var doc = new JsonObject { ["version"] = ProjectSerializer.CurrentVersion };
 

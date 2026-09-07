@@ -190,9 +190,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     public partial int CurrentWordIndex { get; private set; } = -1;
 
-    [RelayCommand]
-    private void ToggleTranscript() => IsTranscriptOpen = !IsTranscriptOpen;
-
     [RelayCommand(CanExecute = nameof(CanEdit))]
     private async Task TranscribeAsync()
     {
@@ -224,7 +221,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             var modelPath = await _models.EnsureAsync(model, progress, ct);
             BusyMessage = "Transcribing…";
-            BusyProgress = 0;
+            BusyProgress = double.NaN;
 
             ITranscriber transcriber = new WhisperTranscriber(ffmpeg, modelPath);
             var words = await transcriber.TranscribeAsync(Project.Source.Path, progress, ct);
@@ -927,12 +924,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         IsTranscriptOpen = true;
 
         var removed = cuts.Sum(c => c.Duration);
+        var removedWords = fillers.Count(w => cuts.Any(c => c.Start < w.End && c.End > w.Start));
         StatusMessage = cuts.Count switch
         {
             0 when fillers.Count == 0 => "No filler words found.",
-            0 => "Every filler word is already cut.",
-            1 => $"Removed 1 filler word, {TimeFormat.Clock(removed)} cut.",
-            _ => $"Removed {cuts.Count} filler words, {TimeFormat.Clock(removed)} cut.",
+            0 => "No filler words left to cut.",
+            _ when removedWords == 1 => $"Removed 1 filler word, {TimeFormat.Clock(removed)} cut.",
+            _ => $"Removed {removedWords} filler words, {TimeFormat.Clock(removed)} cut.",
         };
     }
 
