@@ -26,6 +26,8 @@
     <KeyBinding Gesture="Ctrl+N" Command="{Binding NewProjectCommand}" />
     <KeyBinding Gesture="Cmd+E" Command="{Binding ExportCommand}" />
     <KeyBinding Gesture="Ctrl+E" Command="{Binding ExportCommand}" />
+    <KeyBinding Gesture="Cmd+Shift+E" Command="{Binding ExportTranscriptCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+E" Command="{Binding ExportTranscriptCommand}" />
     <KeyBinding Gesture="Cmd+OemComma" Command="{Binding ShowPreferencesCommand}" />
     <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding ShowPreferencesCommand}" />
     <KeyBinding Gesture="Cmd+Z" Command="{Binding UndoCommand}" />
@@ -71,12 +73,19 @@
         <MenuItem x:Name="SaveAsMenuItem" Header="Save _As…" Command="{Binding SaveProjectAsCommand}" />
         <Separator />
         <MenuItem x:Name="ExportMenuItem" Header="_Export…" Command="{Binding ExportCommand}" />
+        <MenuItem x:Name="ExportTranscriptMenuItem" Header="Export _Transcript…" Command="{Binding ExportTranscriptCommand}" />
         <Separator />
         <MenuItem Header="_Preferences…" Command="{Binding ShowPreferencesCommand}" />
       </MenuItem>
       <MenuItem Header="_Edit">
         <MenuItem x:Name="UndoMenuItem" Header="_Undo" Command="{Binding UndoCommand}" />
         <MenuItem x:Name="RedoMenuItem" Header="_Redo" Command="{Binding RedoCommand}" />
+        <Separator />
+        <MenuItem Header="_Transcribe" Command="{Binding TranscribeCommand}" />
+        <MenuItem Header="Remove _Filler Words" Command="{Binding RemoveFillerWordsCommand}" />
+      </MenuItem>
+      <MenuItem Header="_View">
+        <MenuItem Header="_Transcript" ToggleType="CheckBox" IsChecked="{Binding IsTranscriptOpen, Mode=TwoWay}" />
       </MenuItem>
     </Menu>
 
@@ -85,6 +94,8 @@
       <StackPanel Orientation="Horizontal" Spacing="8">
         <Button Classes="toolbar" Command="{Binding DetectSilenceCommand}" Content="Detect silence" />
         <ToggleButton Classes="toolbar" IsChecked="{Binding IsSettingsOpen}" Content="Detection settings" />
+        <Button Classes="toolbar" Command="{Binding RemoveFillerWordsCommand}" Content="Remove filler words" />
+        <ToggleButton Classes="toolbar" IsChecked="{Binding IsTranscriptOpen}" Content="Transcript" />
         <TextBlock Classes="dim" VerticalAlignment="Center" Margin="12,0,0,0" Text="{Binding SourceFileName}" />
       </StackPanel>
     </Border>
@@ -109,7 +120,7 @@
     </StackPanel>
 
     <!-- Video + optional settings panel side by side (the panel never overlaps the video). -->
-    <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto">
 
       <!-- Overlay content MUST be inside the VideoView (airspace), never a sibling. -->
       <Border Grid.Column="0" Background="Black" ClipToBounds="True">
@@ -162,6 +173,42 @@
                      Text="Re-running detection replaces automatic cuts but never touches segments you have edited by hand." />
         </StackPanel>
       </Border>
+
+      <!-- Transcript -->
+      <Border Grid.Column="2" Width="340" Background="#202024" BorderBrush="#2E2E35" BorderThickness="1,0,0,0"
+              IsVisible="{Binding IsTranscriptOpen}">
+        <Grid RowDefinitions="Auto,Auto,*" Margin="16">
+          <StackPanel Grid.Row="0" Spacing="8">
+            <TextBlock Text="Transcript" FontWeight="SemiBold" FontSize="15" />
+            <TextBlock Classes="dim" TextWrapping="Wrap" FontSize="12"
+                       Text="Click a word to cut or restore it. Drag to select a run. Cmd/Ctrl+click to play from a word." />
+            <Button Content="Remove filler words" Command="{Binding RemoveFillerWordsCommand}" IsVisible="{Binding HasTranscript}" />
+          </StackPanel>
+
+          <Border Grid.Row="1" Background="#5A4A1E" Padding="10,8" Margin="0,10,0,0" IsVisible="{Binding IsTranscriptStale}">
+            <StackPanel Spacing="6">
+              <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#FFF1C8"
+                         Text="The source video changed since this transcript was made. Cut words may not line up." />
+              <Button Content="Transcribe again" Command="{Binding TranscribeCommand}" />
+            </StackPanel>
+          </Border>
+
+          <StackPanel Grid.Row="2" Spacing="10" VerticalAlignment="Center" IsVisible="{Binding !HasTranscript}">
+            <TextBlock Text="No transcript yet" HorizontalAlignment="Center" />
+            <Button Content="Transcribe" Command="{Binding TranscribeCommand}" HorizontalAlignment="Center" />
+            <TextBlock Classes="dim" TextWrapping="Wrap" FontSize="12" TextAlignment="Center"
+                       Text="Runs on this computer. The first run downloads a ~150 MB speech model." />
+          </StackPanel>
+
+          <ScrollViewer Grid.Row="2" Margin="0,12,0,0" IsVisible="{Binding HasTranscript}" HorizontalScrollBarVisibility="Disabled">
+            <controls:TranscriptControl Words="{Binding Transcript}"
+                                        Segments="{Binding Segments}"
+                                        CurrentWordIndex="{Binding CurrentWordIndex}"
+                                        CutWordsCommand="{Binding CutWordsCommand}"
+                                        SeekToWordCommand="{Binding SeekToWordCommand}" />
+          </ScrollViewer>
+        </Grid>
+      </Border>
     </Grid>
 
     <!-- Transport -->
@@ -193,13 +240,15 @@
 
     <!-- Status / progress -->
     <Border Grid.Row="6" Background="#242429" Padding="10,4" MinHeight="28">
-      <Grid ColumnDefinitions="Auto,*">
+      <Grid ColumnDefinitions="Auto,*,Auto">
         <TextBlock Grid.Column="0" Classes="dim" VerticalAlignment="Center" Text="{Binding BusyMessage}" IsVisible="{Binding IsBusy}" />
         <TextBlock Grid.Column="0" Classes="dim" VerticalAlignment="Center" Text="{Binding StatusMessage}" IsVisible="{Binding !IsBusy}" />
         <ProgressBar Grid.Column="1" Margin="12,0,0,0" Height="6" VerticalAlignment="Center"
                      IsVisible="{Binding IsBusy}"
                      IsIndeterminate="{Binding IsBusyIndeterminate}"
                      Minimum="0" Maximum="1" Value="{Binding BusyProgress}" />
+        <Button Grid.Column="2" Content="Cancel" Command="{Binding CancelBusyCommand}" IsVisible="{Binding CanCancelBusy}"
+                Margin="12,0,0,0" Padding="10,2" VerticalAlignment="Center" />
       </Grid>
     </Border>
 

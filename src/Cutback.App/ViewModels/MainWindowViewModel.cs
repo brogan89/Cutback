@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Cutback.Analysis;
 using Cutback.App.Controls;
 using Cutback.App.Playback;
 using Cutback.App.Services;
@@ -8,6 +10,7 @@ using Cutback.Core;
 using Cutback.Core.Detection;
 using Cutback.Core.Models;
 using Cutback.Core.Projects;
+using Cutback.Core.Transcript;
 using Cutback.Media;
 
 namespace Cutback.App.ViewModels;
@@ -19,26 +22,30 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IDialogService _dialogs;
     private readonly AppSettingsStore _settings;
     private readonly TempSession _temp;
+    private readonly ModelStore _models;
     private readonly EditHistory<Segment[]> _history;
     private Segment[]? _dragSnapshot;
     private FfmpegLocation? _ffmpeg;
     private CancellationTokenSource? _openCts;
+    private CancellationTokenSource? _busyCts;
     private bool _loadingSettings;
     private bool _skipping;
     private double? _skipTarget;
 
-    public MainWindowViewModel(IVideoPlayer player, IFileDialogService files, IDialogService dialogs, AppSettingsStore settings, TempSession temp)
+    public MainWindowViewModel(IVideoPlayer player, IFileDialogService files, IDialogService dialogs, AppSettingsStore settings, TempSession temp, ModelStore models)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(dialogs);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(temp);
+        ArgumentNullException.ThrowIfNull(models);
         _player = player;
         _files = files;
         _dialogs = dialogs;
         _settings = settings;
         _temp = temp;
+        _models = models;
 
         _history = new EditHistory<Segment[]>(settings.Current.UndoHistoryLimit);
         _history.Changed += (_, _) =>
@@ -57,7 +64,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProject), nameof(Title), nameof(SourceFileName), nameof(ProjectName))]
-    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand), nameof(ExportTranscriptCommand))]
     public partial CutbackProject? Project { get; private set; }
 
     /// <summary>Where the project was last saved or loaded from. Null for an unsaved project.</summary>
@@ -162,6 +169,106 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         MarkDirty();
     }
 
+    // ---- transcript ---------------------------------------------------------------------------
+
+    /// <summary>Mirrors <c>Project.Transcript</c> for binding. Empty until the project is transcribed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTranscript))]
+    [NotifyCanExecuteChangedFor(nameof(ExportTranscriptCommand))]
+    public partial IReadOnlyList<Word> Transcript { get; private set; } = [];
+
+    public bool HasTranscript => Transcript.Count > 0;
+
+    [ObservableProperty]
+    public partial bool IsTranscriptOpen { get; set; }
+
+    /// <summary>The source file changed after this transcript was made (the hash warning fired on open).</summary>
+    [ObservableProperty]
+    public partial bool IsTranscriptStale { get; private set; }
+
+    /// <summary>Word under the playhead, or -1. Highlighted in the transcript panel.</summary>
+    [ObservableProperty]
+    public partial int CurrentWordIndex { get; private set; } = -1;
+
+    [RelayCommand(CanExecute = nameof(CanEdit))]
+    private async Task TranscribeAsync()
+    {
+        if (await TranscribeCoreAsync())
+        {
+            IsTranscriptOpen = true;
+        }
+    }
+
+    /// <summary>
+    /// Downloads the chosen model if needed, then transcribes the source. Both phases are
+    /// cancellable from the status bar. Returns true if a non-empty transcript is now loaded.
+    /// </summary>
+    private async Task<bool> TranscribeCoreAsync()
+    {
+        if (Project is null)
+        {
+            return false;
+        }
+
+        var model = WhisperModelInfo.Parse(_settings.Current.WhisperModel);
+        ErrorMessage = null;
+        BeginBusy(_models.IsDownloaded(model) ? "Transcribing…" : $"Downloading the {WhisperModelInfo.For(model).Key} speech model…", cancellable: true);
+        try
+        {
+            var ct = _busyCts!.Token;
+            var ffmpeg = ResolveFfmpeg();
+            var progress = new Progress<double>(p => BusyProgress = p);
+
+            var modelPath = await _models.EnsureAsync(model, progress, ct);
+            BusyMessage = "Transcribing…";
+            BusyProgress = double.NaN;
+
+            ITranscriber transcriber = new WhisperTranscriber(ffmpeg, modelPath, model);
+            var words = await transcriber.TranscribeAsync(Project.Source.Path, progress, ct);
+
+            Project = Project with { Transcript = words };
+            Transcript = words;
+            IsTranscriptStale = false;
+            CurrentWordIndex = TranscriptView.IndexAtTime(words, PositionSeconds);
+            MarkDirty();
+            StatusMessage = words.Count == 0 ? "No speech was recognised." : $"Transcribed {words.Count} words.";
+            return words.Count > 0;
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = "Transcription cancelled.";
+            return false;
+        }
+        catch (ModelLoadException ex)
+        {
+            if (!_models.IsPlausiblyComplete(model))
+            {
+                _models.Delete(model);
+                ErrorMessage = ex.Message + " The cached file looked incomplete and has been removed; run Transcribe again to download it.";
+            }
+            else
+            {
+                ErrorMessage = ex.Message + $" If this keeps happening, delete the file at {ex.ModelPath} to download it again.";
+            }
+
+            return false;
+        }
+        catch (DllNotFoundException ex)
+        {
+            ErrorMessage = "The speech recognition library could not be loaded. " + ex.Message;
+            return false;
+        }
+        catch (Exception ex) when (ex is FfmpegNotFoundException or FfmpegException or ModelDownloadException or IOException)
+        {
+            ErrorMessage = ex.Message;
+            return false;
+        }
+        finally
+        {
+            EndBusy();
+        }
+    }
+
     // ---- messages -----------------------------------------------------------------------------
 
     /// <summary>Non-error feedback shown in the footer when nothing is running.</summary>
@@ -190,7 +297,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ---- busy ---------------------------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand), nameof(ExportTranscriptCommand))]
     public partial bool IsBusy { get; private set; }
 
     [ObservableProperty]
@@ -202,6 +309,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public partial double BusyProgress { get; private set; } = double.NaN;
 
     public bool IsBusyIndeterminate => double.IsNaN(BusyProgress);
+
+    /// <summary>True while the running operation can be stopped from the status bar.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelBusyCommand))]
+    public partial bool CanCancelBusy { get; private set; }
+
+    [RelayCommand(CanExecute = nameof(CanCancelBusy))]
+    private void CancelBusy() => _busyCts?.Cancel();
 
     private bool NotBusy => !IsBusy;
 
@@ -338,6 +453,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _dragSnapshot = null;
             Segments = new SegmentList(project.Source.DurationSeconds, project.Segments);
             Segments.Changed += (_, _) => MarkDirty();
+            Transcript = project.Transcript;
+            IsTranscriptStale = warning is not null && project.Transcript.Count > 0;
+            CurrentWordIndex = -1;
             Waveform = waveform;
             DurationSeconds = project.Source.DurationSeconds;
             PositionSeconds = 0;
@@ -384,6 +502,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _dragSnapshot = null;
         Segments = null;
         Waveform = null;
+        Transcript = [];
+        IsTranscriptStale = false;
+        CurrentWordIndex = -1;
         DurationSeconds = 0;
         PositionSeconds = 0;
         IsDirty = false;
@@ -604,6 +725,39 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         Edit(s => s.SetRange(range.Start, range.End, enabled));
     }
 
+    /// <summary>
+    /// A click or drag in the transcript. The run takes the opposite state of the anchor word:
+    /// clicking a kept word cuts it, clicking a struck word restores it. Marked manual, like a
+    /// section drawn on the timeline, and one undo step.
+    /// </summary>
+    [RelayCommand]
+    private void CutWords(WordRange range)
+    {
+        if (Segments is null || Transcript.Count == 0)
+        {
+            return;
+        }
+
+        var lastIndex = Transcript.Count - 1;
+        var first = Math.Clamp(Math.Min(range.First, range.Last), 0, lastIndex);
+        var last = Math.Clamp(Math.Max(range.First, range.Last), 0, lastIndex);
+        var anchor = Math.Clamp(range.Anchor, first, last);
+
+        var enabled = TranscriptView.IsCut(Transcript[anchor], Segments.Segments);
+        var (start, end) = SnapWordSpan(Transcript[first].Start, Transcript[last].End);
+        Edit(s => s.SetRange(start, end, enabled));
+    }
+
+    /// <summary>Cmd/Ctrl+click or "Play from here" in the transcript.</summary>
+    [RelayCommand]
+    private void SeekToWord(int index)
+    {
+        if (index >= 0 && index < Transcript.Count)
+        {
+            Seek(Transcript[index].Start);
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private void Undo()
     {
@@ -651,7 +805,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task ShowPreferencesAsync()
     {
-        var preferences = new PreferencesViewModel(_settings);
+        var preferences = new PreferencesViewModel(_settings, _models);
         await _dialogs.ShowPreferencesAsync(preferences);
         _history.Limit = _settings.Current.UndoHistoryLimit;
     }
@@ -664,6 +818,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private void OnPlayerPosition(double seconds)
     {
         PositionSeconds = seconds;
+        CurrentWordIndex = TranscriptView.IndexAtTime(Transcript, seconds);
 
         // Seek raises PositionChanged synchronously, so this handler can be re-entered by its own
         // seek. Never act on a position while a skip is already in progress: an unguarded loop here
@@ -749,6 +904,99 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Whisper word timing is coarser than a hand-placed boundary, so word edges get a wider snap window than a drag.</summary>
+    private const double WordSnapWindowSeconds = 0.040;
+
+    [RelayCommand(CanExecute = nameof(CanEdit))]
+    private async Task RemoveFillerWordsAsync()
+    {
+        if (Project is null || Segments is null)
+        {
+            return;
+        }
+
+        if (!HasTranscript && !await TranscribeCoreAsync())
+        {
+            return;
+        }
+
+        var fillers = FillerDetector.Find(Transcript, _settings.Current.FillerWords);
+        var envelope = Waveform?.Envelope(EnvelopeBucketSeconds);
+        var threshold = envelope is null ? 0 : FillerSpanLocator.SpeechThreshold(envelope);
+        var located = 0;
+        var spans = new List<FillerSpan>(fillers.Count);
+        foreach (var w in fillers)
+        {
+            var (start, end) = LocateFillerSpan(w, envelope, threshold, ref located);
+            spans.Add(new FillerSpan(start, end, FillerDetector.Normalize(w.Text)));
+        }
+
+        var cuts = FillerCutPlanner.Plan(spans, Segments.Segments, CurrentSettings, DurationSeconds);
+
+        Edit(s => s.ApplyFillerCuts(cuts));
+        IsTranscriptOpen = true;
+
+        var removed = cuts.Sum(c => c.Duration);
+        var removedWords = spans.Count(s => cuts.Any(c => c.Start < s.End && c.End > s.Start));
+        StatusMessage = cuts.Count switch
+        {
+            0 when fillers.Count == 0 => "No filler words found.",
+            0 => "No filler words left to cut.",
+            _ when removedWords == 1 => $"Removed 1 filler word, {TimeFormat.Clock(removed)} cut.",
+            _ => $"Removed {removedWords} filler words, {TimeFormat.Clock(removed)} cut.",
+        };
+        if (fillers.Count > 0 && located == 0)
+        {
+            StatusMessage += " Transcribe again for cuts aligned to the audio.";
+        }
+    }
+
+    /// <summary>Envelope resolution for locating fillers: fine enough to find a word boundary, coarse enough to ignore pitch periods.</summary>
+    private const double EnvelopeBucketSeconds = 0.010;
+
+    /// <summary>
+    /// Where a filler was actually spoken: the burst of speech around its alignment anchor when the
+    /// transcript has anchors, else Whisper's own span snapped to the waveform.
+    /// </summary>
+    private (double Start, double End) LocateFillerSpan(Word word, double[]? envelope, double threshold, ref int located)
+    {
+        if (envelope is not null)
+        {
+            var index = -1;
+            for (var i = 0; i < Transcript.Count; i++)
+            {
+                if (ReferenceEquals(Transcript[i], word))
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            var previous = index > 0 ? Transcript[index - 1] : null;
+            var next = index >= 0 && index + 1 < Transcript.Count ? Transcript[index + 1] : null;
+            if (FillerSpanLocator.Locate(envelope, EnvelopeBucketSeconds, threshold, previous, word, next) is var (start, end))
+            {
+                located++;
+                return (start, end);
+            }
+        }
+
+        return SnapWordSpan(word.Start, word.End);
+    }
+
+    /// <summary>Snaps both edges of a word to the quietest nearby waveform bucket, falling back to the raw edges if snapping would collapse the word.</summary>
+    private (double Start, double End) SnapWordSpan(double start, double end)
+    {
+        if (Waveform is not { } waveform)
+        {
+            return (start, end);
+        }
+
+        var snappedStart = waveform.SnapToZeroCrossing(start, WordSnapWindowSeconds);
+        var snappedEnd = waveform.SnapToZeroCrossing(end, WordSnapWindowSeconds);
+        return snappedEnd - snappedStart < 0.02 ? (start, end) : (snappedStart, snappedEnd);
+    }
+
     // ---- export -------------------------------------------------------------------------------
 
     [RelayCommand(CanExecute = nameof(CanEdit))]
@@ -786,6 +1034,45 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private bool CanExportTranscript => HasProject && HasTranscript && !IsBusy;
+
+    /// <summary>Writes the edited transcript: cut words omitted, times matching the exported video. Format follows the extension.</summary>
+    [RelayCommand(CanExecute = nameof(CanExportTranscript))]
+    private async Task ExportTranscriptAsync()
+    {
+        if (Project is null || Segments is null || !HasTranscript)
+        {
+            return;
+        }
+
+        var path = await _files.PickTranscriptTargetAsync(ProjectName);
+        if (path is null)
+        {
+            return;
+        }
+
+        var isSrt = string.Equals(Path.GetExtension(path), ".srt", StringComparison.OrdinalIgnoreCase);
+        if (!isSrt)
+        {
+            path = NormalizeExtension(path, ".txt");
+        }
+
+        var segments = Segments.Segments;
+        var text = isSrt
+            ? TranscriptExporter.ToSrt(Transcript, segments)
+            : TranscriptExporter.ToPlainText(Transcript, segments);
+
+        try
+        {
+            await File.WriteAllTextAsync(path, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), CancellationToken.None);
+            StatusMessage = $"Exported {Path.GetFileName(path)}.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ErrorMessage = $"Could not write the transcript.\n\n{ex.Message}";
+        }
+    }
+
     // ---- helpers ------------------------------------------------------------------------------
 
     private FfmpegLocation ResolveFfmpeg()
@@ -805,16 +1092,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         return location;
     }
 
-    private void BeginBusy(string message)
+    private void BeginBusy(string message, bool cancellable = false)
     {
         BusyMessage = message;
         BusyProgress = double.NaN;
+        _busyCts = cancellable ? new CancellationTokenSource() : null;
+        CanCancelBusy = cancellable;
         IsBusy = true;
     }
 
     private void EndBusy()
     {
         IsBusy = false;
+        CanCancelBusy = false;
+        _busyCts?.Dispose();
+        _busyCts = null;
         BusyMessage = null;
         BusyProgress = double.NaN;
     }

@@ -9,7 +9,7 @@ namespace Cutback.Core.Projects;
 public static class ProjectSerializer
 {
     /// <summary>Schema version written by this build. Bump alongside a new <see cref="ProjectMigrator"/> step.</summary>
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     public const string FileExtension = ".cutback";
 

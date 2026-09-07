@@ -8,4 +8,10 @@ namespace Cutback.Core.Models;
 /// <param name="Start">Start time in seconds.</param>
 /// <param name="End">End time in seconds.</param>
 /// <param name="Confidence">Recogniser confidence in <c>[0, 1]</c>.</param>
-public sealed record Word(string Text, double Start, double End, double Confidence);
+/// <param name="Anchor">
+/// A point in seconds that lies inside the word's spoken audio, from the recogniser's alignment
+/// (Whisper's DTW timestamp of the first token). More trustworthy than <paramref name="Start"/>
+/// and <paramref name="End"/>, which are heuristic and often miss short words. Null when the
+/// recogniser did not provide one.
+/// </param>
+public sealed record Word(string Text, double Start, double End, double Confidence, double? Anchor = null);

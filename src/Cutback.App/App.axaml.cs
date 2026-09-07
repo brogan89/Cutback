@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Cutback.Analysis;
 using Cutback.App.Playback;
 using Cutback.App.Services;
 using Cutback.App.ViewModels;
@@ -40,7 +41,7 @@ public partial class App : Application
             }
 
             var window = new MainWindow();
-            var viewModel = new MainWindowViewModel(_player, new AvaloniaFileDialogService(window), new AvaloniaDialogService(window), settings, _temp)
+            var viewModel = new MainWindowViewModel(_player, new AvaloniaFileDialogService(window), new AvaloniaDialogService(window), settings, _temp, ModelStore.CreateDefault())
             {
                 ErrorMessage = startupError,
             };

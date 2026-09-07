@@ -24,6 +24,24 @@
       <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" Text="Number of edits you can undo. Lowering it drops the oldest steps." />
     </StackPanel>
 
+    <StackPanel Spacing="6">
+      <TextBlock Text="Speech model" />
+      <ComboBox ItemsSource="{Binding SpeechModels}" SelectedItem="{Binding SelectedSpeechModel}" HorizontalAlignment="Stretch">
+        <ComboBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:SpeechModelOption">
+            <TextBlock Text="{Binding Label}" />
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" Text="Used by Transcribe. Larger models are more accurate and slower. A model is downloaded the first time it is used." />
+    </StackPanel>
+
+    <StackPanel Spacing="6">
+      <TextBlock Text="Filler words" />
+      <TextBox Text="{Binding FillerWordsText}" />
+      <TextBlock Classes="dim" FontSize="12" TextWrapping="Wrap" Text="Comma-separated. Remove filler words cuts every transcript word that matches one of these." />
+    </StackPanel>
+
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Content="Cancel" Command="{Binding CancelCommand}" MinWidth="90" IsCancel="True" />
       <Button Content="OK" Command="{Binding SaveCommand}" MinWidth="90" IsDefault="True" Classes="accent" />

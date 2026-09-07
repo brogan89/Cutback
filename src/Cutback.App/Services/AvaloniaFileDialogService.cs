@@ -81,4 +81,21 @@ public sealed class AvaloniaFileDialogService : IFileDialogService
         });
         return file?.TryGetLocalPath();
     }
+
+    public async Task<string?> PickTranscriptTargetAsync(string suggestedName)
+    {
+        var file = await _owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export transcript",
+            SuggestedFileName = suggestedName,
+            DefaultExtension = "txt",
+            FileTypeChoices =
+            [
+                new FilePickerFileType("Plain text") { Patterns = ["*.txt"] },
+                new FilePickerFileType("SubRip subtitles") { Patterns = ["*.srt"] },
+            ],
+            ShowOverwritePrompt = true,
+        });
+        return file?.TryGetLocalPath();
+    }
 }

@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Cutback.Analysis;
+using Cutback.Core.Detection;
 
 namespace Cutback.App.Services;
 
@@ -46,7 +48,20 @@ public sealed class AppSettingsStore
     {
         UndoHistoryLimit = Math.Clamp(settings.UndoHistoryLimit, AppSettings.MinUndoHistoryLimit, AppSettings.MaxUndoHistoryLimit),
         RecentFiles = settings.RecentFiles ?? [],
+        WhisperModel = WhisperModelInfo.For(WhisperModelInfo.Parse(settings.WhisperModel)).Key,
+        FillerWords = SanitizeFillerWords(settings.FillerWords),
     };
+
+    /// <summary>Normalised, de-duplicated filler words, or the defaults when nothing usable remains.</summary>
+    private static IReadOnlyList<string> SanitizeFillerWords(IReadOnlyList<string>? words)
+    {
+        var cleaned = (words ?? [])
+            .Select(FillerDetector.Normalize)
+            .Where(w => w.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return cleaned.Count > 0 ? cleaned : FillerDetector.DefaultWords;
+    }
 
     public void Update(Func<AppSettings, AppSettings> change)
     {

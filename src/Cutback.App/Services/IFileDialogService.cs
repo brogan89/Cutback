@@ -16,4 +16,8 @@ public interface IFileDialogService
     /// <param name="suggestedName">Default file name, without directory.</param>
     /// <returns>The chosen path, or null if the user cancelled.</returns>
     Task<string?> PickExportTargetAsync(string suggestedName);
+
+    /// <param name="suggestedName">Default file name, without directory or extension.</param>
+    /// <returns>The chosen <c>.txt</c> or <c>.srt</c> path, or null if the user cancelled.</returns>
+    Task<string?> PickTranscriptTargetAsync(string suggestedName);
 }

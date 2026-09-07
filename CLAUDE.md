@@ -40,8 +40,9 @@ Violating any of these is a bug, not a style preference.
    audible click. This is the difference between a toy and a usable tool.
 6. **Cuts are padded by 60ms on each side by default** (configurable). Detection boundaries are
    approximate and tight cuts clip consonants.
-7. **Speech recognition and Claude analysis are out of scope for the current phase.** Define the
-   interfaces, stub the implementations, do not build them yet. See Roadmap.
+7. **Claude analysis is out of scope for the current phase.** `ICutSuggester` stays a stub. Speech
+   recognition (Phase 2) is implemented in `Cutback.Analysis` with Whisper.net and runs entirely on
+   the user's machine; the only network access in the app is the one-time model download.
 
 ---
 
@@ -58,12 +59,13 @@ analyzers at `AnalysisLevel=latest` with code style enforced in build. All packa
 | Video playback | `LibVLCSharp`, `LibVLCSharp.Avalonia` | See LibVLCSharp gotchas below. |
 | VLC native | `VideoLAN.LibVLC.Windows` only | **No NuGet package for Linux** — requires system `libvlc`. **`VideoLAN.LibVLC.Mac` is unusable**: x86_64-only and ships no libvlccore or plugins. On macOS `LibVlcLocator` loads `/Applications/VLC.app` and must `setenv("VLC_PLUGIN_PATH")` via P/Invoke, because .NET's `Environment.SetEnvironmentVariable` does not reach native `getenv` on Unix. |
 | FFmpeg | `FFMpegCore` | Used for **ffprobe analysis only** (`MediaProbe`). Everything that streams stdout or parses stderr/progress (waveform, silencedetect, export, keyframe listing) goes through the small `FfmpegProcess` wrapper over `System.Diagnostics.Process`, which is simpler and identical on every platform. Do not switch to `FFmpeg.AutoGen`; the raw P/Invoke bindings are not worth the pain here. |
+| Speech recognition | `Whisper.net`, `Whisper.net.Runtime` | CPU runtime (the package also pulls in `Whisper.net.Runtime.Metal` for macOS), **pinned to 1.9.x**. Models are downloaded on first use into `<ApplicationData>/Cutback/models` by `ModelStore`, never bundled. Token `Start`/`End`/`DtwTimestamp` are `long` centiseconds (`DtwTimestamp` is -1 when unavailable). DTW alignment is on so words get an `Anchor`; see "Locating filler words". The initial prompt is primed with disfluent text (and carried into every window) because Whisper otherwise drops "um"s. |
 | Waveform drawing | SkiaSharp **transitively via `Avalonia.Skia`** (2.88.x) | **Do not add a direct `SkiaSharp` PackageReference.** Custom drawing obtains an `SKCanvas` through `ISkiaSharpApiLeaseFeature` and must use the same SkiaSharp assembly Avalonia does. A direct reference to current SkiaSharp (4.x) unifies to an incompatible version and breaks Avalonia's renderer. |
 | JSON | `System.Text.Json` | Source-generated context, no reflection. |
 | Tests | `xunit`, `FluentAssertions` | FluentAssertions **pinned to 7.x** (Apache-2.0). 8.x moved to a commercial licence. |
 
-Deferred to a later phase, do not add yet: `Whisper.net`, `Whisper.net.Runtime`, `Vosk`,
-`Microsoft.ML.OnnxRuntime`.
+Deferred to a later phase, do not add yet: `Vosk`, `Microsoft.ML.OnnxRuntime`, Silero VAD. Reach for
+them only if disfluent prompting proves to miss too many fillers on real recordings.
 
 ---
 
@@ -78,29 +80,37 @@ Cutback/
 │   ├── Cutback.Core/              # NO UI, NO ffmpeg dependencies. Pure logic.
 │   │   ├── Models/                # Segment, Word, CutbackProject
 │   │   ├── SegmentList.cs         # the partition invariant lives here
+│   │   ├── Detection/             # SilenceCutPlanner, FillerDetector, FillerCutPlanner
+│   │   ├── Transcript/            # TranscriptView, OutputTimeline, TranscriptExporter
 │   │   └── Projects/              # save / load / migrate
 │   ├── Cutback.Media/             # everything that shells out to ffmpeg
 │   │   ├── FfmpegLocator.cs
 │   │   ├── MediaProbe.cs
 │   │   ├── WaveformExtractor.cs
+│   │   ├── PcmExtractor.cs        # 16 kHz float PCM for speech recognition
 │   │   ├── SilenceDetector.cs
 │   │   └── Export/
 │   │       ├── FilterGraphBuilder.cs
 │   │       └── Exporter.cs
-│   ├── Cutback.Analysis/          # PHASE 2 — interfaces only for now
+│   ├── Cutback.Analysis/          # PHASE 2 (speech) implemented; PHASE 3 (Claude) interface only
 │   │   ├── ITranscriber.cs
+│   │   ├── WhisperTranscriber.cs  # + WordAssembler, ModelStore, WhisperModel
 │   │   └── ICutSuggester.cs
 │   └── Cutback.App/               # Avalonia
 │       ├── Views/
 │       ├── ViewModels/
-│       └── Controls/TimelineControl.cs
+│       └── Controls/              # TimelineControl.cs, TranscriptControl.cs
 └── tests/
     ├── Cutback.Core.Tests/
-    └── Cutback.Media.Tests/       # ffmpeg-independent logic only; never runs ffmpeg
+    ├── Cutback.Media.Tests/       # ffmpeg-independent logic only; never runs ffmpeg
+    └── Cutback.Analysis.Tests/    # word assembly, model metadata; never loads a model
 ```
 
 `Cutback.Core` must stay dependency-free apart from `System.Text.Json`. If you find yourself wanting to
 reference FFMpegCore or Avalonia from Core, the logic is in the wrong project.
+
+`Cutback.Analysis` may reference `Cutback.Media` (it needs ffmpeg to decode audio) but never the
+other way round, and never `Cutback.App`.
 
 ---
 
@@ -110,7 +120,7 @@ A project is a JSON file (`.cutback`). Schema:
 
 ```jsonc
 {
-  "version": 1,
+  "version": 2,
   "source": {
     "path": "/abs/path/to/recording.mp4",
     "sha256": "…",              // first 8MB + file size, not the whole file
@@ -122,7 +132,7 @@ A project is a JSON file (`.cutback`). Schema:
     { "id": "…", "start": 3.21, "end": 4.86,  "enabled": false, "origin": "auto",   "reason": "silence 1.65s" },
     { "id": "…", "start": 4.86, "end": 12.04, "enabled": true,  "origin": "manual", "reason": null }
   ],
-  "transcript": [],             // PHASE 2: [{ "text", "start", "end", "confidence" }]
+  "transcript": [],             // [{ "text", "start", "end", "confidence" }], filled by Transcribe
   "settings": {
     "paddingMs": 60,
     "minSilenceMs": 400,
@@ -146,15 +156,21 @@ This is deliberate. It means:
 Operations on `SegmentList` (`Split`, `MoveBoundary`, `Toggle`, `MergeAdjacentSameState`) must preserve
 this. Assert it at the end of every mutating operation in Debug. Unit tests cover it.
 
-`origin` is `auto | manual | claude` and exists so the UI can show why a cut was made and so a
-re-analysis can replace `auto` cuts without touching the user's `manual` ones. **Re-running detection
-must never discard manual edits.** What counts as a manual edit: **`Toggle` marks the segment manual;
-`MoveBoundary` marks only disabled neighbours manual; `Split` marks nothing** (it inherits origin);
-**`SetRange` (drag to draw a section) marks the new section manual; `Dissolve` (delete a region) marks
-nothing** — the region ceases to exist and its neighbours grow over it, keeping their own origins.
-A split is not a decision about either half, and locking kept regions would stop re-detection from
-finding new silences inside them. `ReplaceAutoSegments` preserves every non-`auto` segment exactly and
-clips new cuts around them.
+`origin` is `auto | manual | claude | filler` and exists so the UI can show why a cut was made and
+so a re-analysis can replace its own cuts without touching anyone else's. **Re-running detection
+must never discard manual edits.** What counts as a manual edit: **`Toggle` marks the segment
+manual; `MoveBoundary` marks only disabled neighbours manual; `Split` marks nothing** (it inherits
+origin); **`SetRange` (drag to draw a section, or click / drag in the transcript) marks the new
+section manual; `Dissolve` (delete a region) marks nothing** — the region ceases to exist and its
+neighbours grow over it, keeping their own origins. A split is not a decision about either half,
+and locking kept regions would stop re-detection from finding new silences inside them.
+`ReplaceAutoSegments` (silence) preserves every non-`auto` segment exactly and clips new cuts
+around them. `ApplyFillerCuts` (filler words) dissolves the previous `filler` segments and carves
+the new cuts into whatever is there; `FillerCutPlanner` drops any candidate that touches a
+`manual` segment, so the two detectors leave each other's and the user's cuts alone.
+
+Schema version 2 added the `filler` origin. The 1→2 migration is a no-op; the bump exists so an
+older build refuses the file with its "newer version" message instead of a deserialisation error.
 
 `sha256` is used to warn the user when the source file has changed or moved. It does not block opening.
 
@@ -181,6 +197,35 @@ sample on release).
 segment under the press point (drag over kept footage to cut it, drag inside a cut to restore part
 of it). **Shift+drag: pan.** Wheel: zoom about the cursor; Shift+wheel or horizontal wheel: pan.
 Ruler: scrub.
+
+### Transcript gestures
+
+The transcript panel (View → Transcript) is a second editing surface over the same `SegmentList`.
+A word is struck through when its `Anchor` (or, for transcripts without anchors, its midpoint)
+lies in a disabled segment (`TranscriptView.IsCut`).
+**Click a word**: cut it, or restore it if it is struck. **Drag across words**: the run takes the
+opposite state of the word the drag started on. Both are `SetRange`, so they mark the section
+manual and are one undo step. **Cmd/Ctrl+click**: play from the word. **Right-click**: Play from
+here, Cut / Restore. Word edges snap to the quietest waveform bucket within ±40 ms (twice the
+boundary-drag window, because Whisper timing is coarse). Export Transcript writes the *edited*
+transcript (`.txt` or `.srt`) with times remapped by `OutputTimeline` so it lines up with the
+exported video.
+
+### Locating filler words
+
+**Whisper's heuristic `Start`/`End` for a short "uh" usually lands on the pause beside it, not on
+the sound.** Measured on a real recording, two of three "uh"s were timed onto silence, one with
+its audio folded into the previous word's span. So "Remove filler words" does not cut the
+heuristic span. `WhisperTranscriber` enables DTW alignment (`UseDtwTimeStamps` with the model's
+heads preset) and each `Word` carries an `Anchor`: the DTW time of its first token, which does
+fall inside the spoken word. `FillerSpanLocator` (Core, pure) then takes the burst of speech in
+the 10 ms loudness envelope (`Waveform.Envelope`) that contains the anchor; when a neighbour's
+heuristic span swallowed that burst it splits at the quietest point between them if that is a
+real valley (under 75% of the burst's median, never within 100 ms of the burst edge), else 80 ms
+before the anchor / 300 ms after it. The pipeline is `FillerDetector` → `FillerSpanLocator` (falling
+back to the snapped heuristic span for words without anchors) → `FillerCutPlanner` →
+`ApplyFillerCuts`, one undo step. Transcripts made before anchors existed still work, and the
+status line tells the user to transcribe again for aligned cuts.
 
 ---
 
@@ -302,10 +347,13 @@ These will cost you hours if you don't know them:
 ## Testing
 
 Unit tests cover `Cutback.Core` (the partition invariant including `SetRange`, `Dissolve` and `Restore`,
-`EditHistory`, detection planning, project round-trip serialisation, version migration, source hashing) and the ffmpeg-independent parts of `Cutback.Media`
+`EditHistory`, detection planning, project round-trip serialisation, version migration, source hashing,
+filler detection and planning, transcript cut-state, output timeline, transcript exporters) and the
+ffmpeg-independent parts of `Cutback.Media`
 (`FfmpegLocator` resolution order, `PeakReducer`, waveform levels and snapping, the silencedetect and
 `-progress` parsers, `FfmpegCapabilities` version parsing, `KeyframeSnapper`, and `FilterGraphBuilder`
-output asserted against expected filter strings). **Never shell out to ffmpeg in tests.** Do not attempt
+output asserted against expected filter strings), and `WordAssembler`, model metadata and cache layout
+in `Cutback.Analysis.Tests`. **Never shell out to ffmpeg in tests.** Do not attempt
 to unit-test Avalonia views.
 
 ## Commands
@@ -333,14 +381,15 @@ Ship a `THIRD-PARTY-NOTICES.md` and keep it current.
 
 ## Roadmap
 
-**Phase 1 — MVP (current).** Open a video, waveform, timeline with toggleable segments, silence
+**Phase 1 — MVP (done).** Open a video, waveform, timeline with toggleable segments, silence
 detection, save/load, export. No speech recognition, no Claude.
 
-**Phase 2 — Filler words.** `Whisper.net` for word-level timestamps behind `ITranscriber`. Critical
-known issue: **Whisper is trained to strip disfluencies**, so a naive transcript will contain no "um"s
-at all. Mitigation is threefold — prime the initial prompt with disfluent text, use Silero VAD to find
-speech regions Whisper produced no word for, and offer Vosk as an alternative engine that retains
-fillers more reliably. Budget real time for this; it is the hardest part of the product.
+**Phase 2 — Filler words (implemented).** `Whisper.net` behind `ITranscriber`, word-level
+timestamps from token timestamps, an editable transcript panel, filler-word cuts with their own
+`filler` origin, transcript export. Known issue: **Whisper is trained to strip disfluencies.** The
+shipped mitigation is a disfluent initial prompt carried into every window. If recall on real
+recordings is poor, the next steps are Silero VAD to find speech islands Whisper produced no word
+for, and Vosk as an alternative engine that retains fillers more reliably.
 
 **Phase 3 — Claude analysis.** Behind `ICutSuggester`. Sends the timestamped transcript (text and
 indices only — never audio) to `/v1/messages` and receives JSON cut spans for false starts, repeated

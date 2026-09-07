@@ -322,12 +322,94 @@ public sealed class ProjectSerializerTests
     }
 
     [Fact]
-    public void Default_migrator_targets_the_current_version_with_no_steps_yet()
+    public void Default_migrator_applies_no_steps_to_a_current_version_document()
     {
         var doc = new JsonObject { ["version"] = ProjectSerializer.CurrentVersion };
 
         ProjectMigrator.Default.Migrate(doc);
 
         doc["version"]!.GetValue<int>().Should().Be(ProjectSerializer.CurrentVersion);
+    }
+
+    // ---- word anchors -------------------------------------------------------------------------
+
+    [Fact]
+    public void A_word_anchor_round_trips_and_is_null_when_absent()
+    {
+        var words = new[] { new Word("um", 1.0, 1.3, 0.9, Anchor: 1.12), new Word("so", 1.4, 1.6, 0.9) };
+        var project = new CutbackProject(Source, [Segment.Create(0.0, 12.04, enabled: true, SegmentOrigin.Auto)], words, DetectionSettings.Default);
+
+        var json = ProjectSerializer.Serialize(project);
+        var loaded = ProjectSerializer.Deserialize(json);
+
+        JsonNode.Parse(json)!["transcript"]![0]!["anchor"]!.GetValue<double>().Should().Be(1.12);
+        loaded.Transcript[0].Anchor.Should().Be(1.12);
+        loaded.Transcript[1].Anchor.Should().BeNull();
+    }
+
+    [Fact]
+    public void A_transcript_word_without_an_anchor_field_loads_with_no_anchor()
+    {
+        const string json = """
+            {
+              "version": 2,
+              "source": { "path": "/abs/path/to/recording.mp4", "sha256": "0123abcd", "durationSeconds": 12.04, "width": 1920, "height": 1080, "frameRate": 30.0 },
+              "segments": [ { "id": "a", "start": 0.0, "end": 12.04, "enabled": true, "origin": "auto", "reason": null } ],
+              "transcript": [ { "text": "um", "start": 1.0, "end": 1.3, "confidence": 0.9 } ],
+              "settings": { "paddingMs": 60, "minSilenceMs": 400, "silenceThresholdDb": -34.0, "minKeepMs": 120 }
+            }
+            """;
+
+        var project = ProjectSerializer.Deserialize(json);
+
+        project.Transcript.Should().ContainSingle().Which.Anchor.Should().BeNull();
+    }
+
+    // ---- version 2: filler origin -------------------------------------------------------------
+
+    [Fact]
+    public void Current_version_is_2()
+    {
+        ProjectSerializer.CurrentVersion.Should().Be(2);
+    }
+
+    [Fact]
+    public void Filler_origin_round_trips_as_a_lower_case_string()
+    {
+        var segments = new[]
+        {
+            Segment.Create(0.0, 3.0, enabled: true, SegmentOrigin.Auto),
+            Segment.Create(3.0, 3.4, enabled: false, SegmentOrigin.Filler, "filler: um"),
+            Segment.Create(3.4, 12.04, enabled: true, SegmentOrigin.Auto),
+        };
+        var project = new CutbackProject(Source, segments, [], DetectionSettings.Default);
+
+        var json = ProjectSerializer.Serialize(project);
+        var loaded = ProjectSerializer.Deserialize(json);
+
+        JsonNode.Parse(json)!["segments"]![1]!["origin"]!.GetValue<string>().Should().Be("filler");
+        loaded.Segments[1].Origin.Should().Be(SegmentOrigin.Filler);
+        loaded.Segments[1].Reason.Should().Be("filler: um");
+    }
+
+    [Fact]
+    public void A_version_1_file_is_migrated_to_version_2_unchanged()
+    {
+        const string v1 = """
+            {
+              "version": 1,
+              "source": { "path": "/abs/path/to/recording.mp4", "sha256": "0123abcd", "durationSeconds": 12.04, "width": 1920, "height": 1080, "frameRate": 30.0 },
+              "segments": [
+                { "id": "a", "start": 0.0, "end": 12.04, "enabled": true, "origin": "auto", "reason": null }
+              ],
+              "transcript": [],
+              "settings": { "paddingMs": 60, "minSilenceMs": 400, "silenceThresholdDb": -34.0, "minKeepMs": 120 }
+            }
+            """;
+
+        var project = ProjectSerializer.Deserialize(v1);
+
+        project.Segments.Should().ContainSingle().Which.Id.Should().Be("a");
+        JsonNode.Parse(ProjectSerializer.Serialize(project))!["version"]!.GetValue<int>().Should().Be(2);
     }
 }

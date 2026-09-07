@@ -1,13 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Phase 2/3 seams: ITranscriber (local speech-to-text) and ICutSuggester (Claude reasoning over a
-    text transcript). Interfaces and NotImplemented stubs only for now. No speech-recognition or
-    HTTP dependencies may be added here until those phases begin.
+    Phase 2: local speech recognition behind ITranscriber (Whisper.net, CPU runtime). The Phase 3
+    seam ICutSuggester is still a stub. Nothing here may upload audio anywhere; the only network
+    access is the one-time model download in ModelStore.
   -->
 
   <ItemGroup>
+    <PackageReference Include="Whisper.net" />
+    <PackageReference Include="Whisper.net.Runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Cutback.Core\Cutback.Core.csproj" />
+    <ProjectReference Include="..\Cutback.Media\Cutback.Media.csproj" />
   </ItemGroup>
 
 </Project>
