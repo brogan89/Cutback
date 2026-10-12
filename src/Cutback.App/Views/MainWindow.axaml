@@ -203,6 +203,7 @@
                                 MoveBoundaryCommand="{Binding MoveBoundaryCommand}"
                                 CreateSectionCommand="{Binding CreateSectionCommand}"
                                 DeleteSegmentCommand="{Binding DeleteSegmentCommand}"
+                                Markers="{Binding Capture.Markers}"
                                 HoveredSegment="{Binding HoveredSegmentIndex, Mode=OneWayToSource}" />
     </Border>
 

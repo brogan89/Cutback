@@ -8,6 +8,7 @@ using Avalonia.Platform;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Cutback.Core;
+using Cutback.Core.Capture;
 using Cutback.Core.Models;
 using Cutback.Media;
 using SkiaSharp;
@@ -61,6 +62,9 @@ public sealed class TimelineControl : Control
     public static readonly StyledProperty<int> HoveredSegmentProperty =
         AvaloniaProperty.Register<TimelineControl, int>(nameof(HoveredSegment), -1, defaultBindingMode: Avalonia.Data.BindingMode.OneWayToSource);
 
+    public static readonly StyledProperty<IReadOnlyList<CaptureMarker>?> MarkersProperty =
+        AvaloniaProperty.Register<TimelineControl, IReadOnlyList<CaptureMarker>?>(nameof(Markers));
+
     private const double RulerHeight = 22;
     private const double BoundaryHitHalfWidth = 5;
     private const double DragThreshold = 4;
@@ -96,7 +100,7 @@ public sealed class TimelineControl : Control
 
     static TimelineControl()
     {
-        AffectsRender<TimelineControl>(WaveformProperty, DurationProperty, PositionProperty);
+        AffectsRender<TimelineControl>(WaveformProperty, DurationProperty, PositionProperty, MarkersProperty);
         FocusableProperty.OverrideDefaultValue<TimelineControl>(true);
     }
 
@@ -180,6 +184,13 @@ public sealed class TimelineControl : Control
     {
         get => GetValue(HoveredSegmentProperty);
         set => SetValue(HoveredSegmentProperty, value);
+    }
+
+    /// <summary>Points of interest from a Mainframe Engine recording, drawn in the ruler. Null for other videos.</summary>
+    public IReadOnlyList<CaptureMarker>? Markers
+    {
+        get => GetValue(MarkersProperty);
+        set => SetValue(MarkersProperty, value);
     }
 
     // ---- property changes ---------------------------------------------------------------------
@@ -616,6 +627,7 @@ public sealed class TimelineControl : Control
             _gesture == Gesture.Section
                 ? new TimeRange(Math.Min(_sectionAnchor, _sectionCurrent), Math.Max(_sectionAnchor, _sectionCurrent))
                 : null,
+            Markers,
             _palette);
         context.Custom(new DrawOperation(new Rect(Bounds.Size), snapshot));
     }
@@ -633,6 +645,7 @@ public sealed class TimelineControl : Control
         int HoverSegment,
         int ActiveBoundary,
         TimeRange? PendingSection,
+        IReadOnlyList<CaptureMarker>? Markers,
         Palette Palette);
 
     /// <summary>The timeline's colours. Keys match the Timeline* entries in Styles/Theme.axaml.</summary>
@@ -652,7 +665,8 @@ public sealed class TimelineControl : Control
         SKColor Tick,
         SKColor Label,
         SKColor ReasonText,
-        SKColor Hint)
+        SKColor Hint,
+        SKColor Marker)
     {
         /// <summary>Used before the control is attached and for any key the theme lacks, so the previewer still draws.</summary>
         public static Palette Fallback { get; } = new(
@@ -671,7 +685,8 @@ public sealed class TimelineControl : Control
             Tick: new SKColor(0x4E, 0x4E, 0x58),
             Label: new SKColor(0x9A, 0x9A, 0xA6),
             ReasonText: new SKColor(0x7C, 0x7C, 0x88),
-            Hint: new SKColor(0x60, 0x60, 0x6A));
+            Hint: new SKColor(0x60, 0x60, 0x6A),
+            Marker: new SKColor(0xB4, 0x8C, 0xFF));
 
         public static Palette FromResources(IResourceHost host)
         {
@@ -692,7 +707,8 @@ public sealed class TimelineControl : Control
                 Resolve(host, "TimelineTick", f.Tick),
                 Resolve(host, "TimelineLabel", f.Label),
                 Resolve(host, "TimelineReasonText", f.ReasonText),
-                Resolve(host, "TimelineHint", f.Hint));
+                Resolve(host, "TimelineHint", f.Hint),
+                Resolve(host, "TimelineMarker", f.Marker));
         }
 
         // Avalonia's Color.ToUInt32() and SKColor(uint) both pack ARGB, so the conversion is a cast.
@@ -754,6 +770,7 @@ public sealed class TimelineControl : Control
             DrawBoundaries(canvas, paint, bodyTop, h);
             DrawPendingSection(canvas, paint, bodyTop, h);
             DrawRuler(canvas, paint, w, bodyTop);
+            DrawMarkers(canvas, paint, bodyTop);
             DrawPlayhead(canvas, paint, h);
         }
 
@@ -937,6 +954,38 @@ public sealed class TimelineControl : Control
             paint.Color = _s.Palette.Tick;
             paint.IsAntialias = false;
             canvas.DrawLine(0, bodyTop - 0.5f, w, bodyTop - 0.5f, paint);
+        }
+
+        private void DrawMarkers(SKCanvas canvas, SKPaint paint, float bodyTop)
+        {
+            if (_s.Markers is not { Count: > 0 } markers)
+            {
+                return;
+            }
+
+            var style = paint.Style;
+            paint.Style = SKPaintStyle.Fill;
+            paint.IsAntialias = true;
+            paint.Color = _s.Palette.Marker;
+            paint.TextSize = 10;
+            foreach (var marker in markers)
+            {
+                if (marker.Time < _s.ViewStart || marker.Time > _s.ViewEnd)
+                {
+                    continue;
+                }
+
+                var x = (float)TimeToX(marker.Time);
+                using var head = new SKPath();
+                head.MoveTo(x - 4, bodyTop - 9);
+                head.LineTo(x + 4, bodyTop - 9);
+                head.LineTo(x, bodyTop - 1);
+                head.Close();
+                canvas.DrawPath(head, paint);
+                canvas.DrawText(marker.Label, x + 6, bodyTop - 2, paint);
+            }
+
+            paint.Style = style;
         }
 
         private void DrawPlayhead(SKCanvas canvas, SKPaint paint, float h)
