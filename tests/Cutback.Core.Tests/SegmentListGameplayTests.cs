@@ -115,4 +115,38 @@ public sealed class SegmentListGameplayTests
         list.Segments.Should().Contain(s => s.Origin == SegmentOrigin.Gameplay && !s.Enabled && s.Start == 10.0 && s.End == 25.0);
         list.ShouldBeValidPartitionOf(Duration);
     }
+
+    [Fact]
+    public void Rerun_withdraws_gameplay_cuts_next_to_a_silence_cut_without_touching_it()
+    {
+        var list = new SegmentList(Duration);
+        list.ReplaceAutoSegments([new PlannedCut(8, 12, "silence 4.00s")]);
+        list.ReplaceOriginCuts(SegmentOrigin.Gameplay, [Idle(12, 29.5)]);
+
+        list.ReplaceOriginCuts(SegmentOrigin.Gameplay, []);
+
+        list.Segments.Select(s => (s.Start, s.End, s.Enabled, s.Origin, s.Reason)).Should().Equal(
+            (0.0, 8.0, true, SegmentOrigin.Auto, (string?)null),
+            (8.0, 12.0, false, SegmentOrigin.Auto, "silence 4.00s"),
+            (12.0, 60.0, true, SegmentOrigin.Auto, null));
+        list.ShouldBeValidPartitionOf(Duration);
+    }
+
+    [Fact]
+    public void Rerun_does_not_spread_a_manual_cut_over_the_old_gameplay_footage()
+    {
+        var list = new SegmentList(Duration);
+        list.SetRange(5, 10, enabled: false);
+        list.ReplaceOriginCuts(SegmentOrigin.Gameplay, [Idle(10, 20)]);
+
+        list.ReplaceOriginCuts(SegmentOrigin.Gameplay, [Idle(12, 18)]);
+
+        list.Segments.Select(s => (s.Start, s.End, s.Enabled, s.Origin)).Should().Equal(
+            (0.0, 5.0, true, SegmentOrigin.Auto),
+            (5.0, 10.0, false, SegmentOrigin.Manual),
+            (10.0, 12.0, true, SegmentOrigin.Auto),
+            (12.0, 18.0, false, SegmentOrigin.Gameplay),
+            (18.0, 60.0, true, SegmentOrigin.Auto));
+        list.ShouldBeValidPartitionOf(Duration);
+    }
 }

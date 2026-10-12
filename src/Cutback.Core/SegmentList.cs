@@ -493,14 +493,23 @@ public sealed class SegmentList
 
     /// <summary>
     /// Applies a fresh result from a detector that carves cuts into the existing partition
-    /// (filler words, gameplay). Every existing segment of <paramref name="origin"/> is dissolved
-    /// into its neighbours first, so a re-run replaces the previous result, then each cut is carved
-    /// out of whatever is there with that origin. Segments of other origins outside the cuts are
-    /// untouched; the caller is responsible for not passing cuts that overlap manual segments.
-    /// Dissolving never merges two kept neighbours of different origins into one: that would spread
-    /// a neighbour's <see cref="SegmentOrigin.Manual"/> origin over the other's footage and lock it
+    /// (filler words, gameplay). The previous result is removed first so a re-run replaces it, then
+    /// each cut is carved out of whatever is there with that origin. Segments of other origins
+    /// outside the cuts are untouched; the caller is responsible for not passing cuts that overlap
+    /// manual segments.
+    /// <para>
+    /// For <see cref="SegmentOrigin.Gameplay"/> the previous cuts are <em>withdrawn</em>: each becomes
+    /// a kept <see cref="SegmentOrigin.Auto"/> segment (keeping its id) and joins only immediately
+    /// adjacent segments that are also kept and Auto, so withdrawing never changes a disabled,
+    /// manual, filler or Claude neighbour, and the footage it covered is never left cut.
+    /// </para>
+    /// <para>
+    /// For other origins (filler) every previous segment is dissolved into its neighbours, which
+    /// never merges two kept neighbours of different origins into one: that would spread a
+    /// neighbour's <see cref="SegmentOrigin.Manual"/> origin over the other's footage and lock it
     /// from future re-detection. Same-origin neighbours still merge, exactly as <see cref="Dissolve"/>
     /// would.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="origin"/> is <see cref="SegmentOrigin.Auto"/>
     /// (re-laid by <see cref="ReplaceAutoSegments"/>) or <see cref="SegmentOrigin.Manual"/> (never replaced in bulk).</exception>
@@ -517,7 +526,17 @@ public sealed class SegmentList
         var changed = false;
         for (var i = _segments.Count - 1; i >= 0; i--)
         {
-            if (_segments[i].Origin == origin && DissolveDetectorCutCore(i))
+            if (_segments[i].Origin != origin)
+            {
+                continue;
+            }
+
+            if (origin == SegmentOrigin.Gameplay)
+            {
+                WithdrawCore(i);
+                changed = true;
+            }
+            else if (DissolveDetectorCutCore(i))
             {
                 changed = true;
             }
@@ -540,6 +559,30 @@ public sealed class SegmentList
 
         return applied;
     }
+
+    /// <summary>
+    /// Turns the segment at <paramref name="index"/> back into kept <see cref="SegmentOrigin.Auto"/>
+    /// footage (same id, no reason) and merges it with an immediately adjacent segment on either
+    /// side only if that segment is also enabled and Auto. The left neighbour's id and reason win.
+    /// </summary>
+    private void WithdrawCore(int index)
+    {
+        _segments[index] = _segments[index] with { Enabled = true, Origin = SegmentOrigin.Auto, Reason = null };
+
+        if (index < _segments.Count - 1 && IsKeptAuto(_segments[index + 1]))
+        {
+            _segments[index] = _segments[index] with { End = _segments[index + 1].End };
+            _segments.RemoveAt(index + 1);
+        }
+
+        if (index > 0 && IsKeptAuto(_segments[index - 1]))
+        {
+            _segments[index - 1] = _segments[index - 1] with { End = _segments[index].End };
+            _segments.RemoveAt(index);
+        }
+    }
+
+    private static bool IsKeptAuto(Segment s) => s.Enabled && s.Origin == SegmentOrigin.Auto;
 
     /// <summary>The stretches of <c>[0, Duration]</c> not covered by locked segments, in order.</summary>
     private IEnumerable<(double Start, double End)> FreeRegions(List<Segment> locked)
