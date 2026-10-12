@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500" width="1000" height="500" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Phase 4: Clips tab in the Mainframe Editor, shared MIT packages and licence boundaries</title>
+  <style>
+    .bg { fill: #ffffff; }
+    .group { fill: #f6f8fa; stroke: #d1d9e0; stroke-width: 1.5; }
+    .mit { fill: #dafbe1; stroke: #1a7f37; stroke-width: 1.5; }
+    .box { fill: #ffffff; stroke: #818b98; stroke-width: 1.5; }
+    .muted { fill: #f6f8fa; stroke: #afb8c1; stroke-width: 1.5; stroke-dasharray: 2 3; }
+    .ext { fill: #ffebe9; stroke: #cf222e; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .gh { font-size: 15px; font-weight: 600; fill: #1f2328; }
+    .t { font-size: 14px; font-weight: 600; fill: #1f2328; }
+    .s { font-size: 12px; fill: #59636e; }
+    .line { stroke: #59636e; stroke-width: 1.5; fill: none; }
+    .ah { fill: #59636e; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      .group { fill: #151b23; stroke: #3d444d; }
+      .mit { fill: #0f2d1a; stroke: #3fb950; }
+      .box { fill: #0d1117; stroke: #656c76; }
+      .muted { fill: #151b23; stroke: #3d444d; }
+      .ext { fill: #3a1418; stroke: #f85149; }
+      .gh, .t { fill: #f0f6fc; } .s { fill: #9198a1; }
+      .line { stroke: #9198a1; } .ah { fill: #9198a1; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="ah"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1000" height="500"/>
+
+  <!-- Shared packages -->
+  <rect class="group" x="20" y="20" width="320" height="220" rx="10"/>
+  <text class="gh" x="180" y="46" text-anchor="middle">Shared NuGet packages · MIT</text>
+  <rect class="mit" x="40" y="62" width="280" height="76" rx="8"/>
+  <text class="t" x="180" y="86" text-anchor="middle">Cutback.Core</text>
+  <text class="s" x="180" y="106" text-anchor="middle">SegmentList · EditHistory · planners</text>
+  <text class="s" x="180" y="124" text-anchor="middle">.cutback I/O · capture sidecar model</text>
+  <rect class="mit" x="40" y="150" width="280" height="76" rx="8"/>
+  <text class="t" x="180" y="174" text-anchor="middle">Cutback.Media</text>
+  <text class="s" x="180" y="194" text-anchor="middle">FfmpegProcess · waveform · silencedetect</text>
+  <text class="s" x="180" y="212" text-anchor="middle">FilterGraphBuilder · Exporter · encoder probe</text>
+
+  <!-- Shipped game -->
+  <rect class="muted" x="20" y="270" width="320" height="130" rx="10"/>
+  <text class="gh" x="180" y="298" text-anchor="middle">Shipped game</text>
+  <text class="s" x="180" y="322" text-anchor="middle">MainframeEngine runtime only.</text>
+  <text class="s" x="180" y="340" text-anchor="middle">No Cutback packages, no bundled ffmpeg.</text>
+  <text class="s" x="180" y="364" text-anchor="middle">GameRecorder looks for ffmpeg only</text>
+  <text class="s" x="180" y="382" text-anchor="middle">when --record is passed.</text>
+
+  <!-- Cutback app -->
+  <rect class="box" x="400" y="20" width="580" height="80" rx="10"/>
+  <text class="t" x="690" y="48" text-anchor="middle">Cutback app (optional after Phase 4)</text>
+  <text class="s" x="690" y="70" text-anchor="middle">Avalonia · LibVLC · Whisper transcript and filler words</text>
+  <text class="s" x="690" y="88" text-anchor="middle">opens the same .cutback projects as the Clips tab</text>
+
+  <!-- Editor -->
+  <rect class="group" x="400" y="130" width="580" height="270" rx="10"/>
+  <text class="gh" x="690" y="156" text-anchor="middle">MainframeEngine.Editor · Src/Clips/</text>
+
+  <rect class="box" x="420" y="172" width="170" height="60" rx="8"/>
+  <text class="t" x="505" y="196" text-anchor="middle">ClipTab</text>
+  <text class="s" x="505" y="216" text-anchor="middle">IEditorTab, .cutback file</text>
+  <rect class="box" x="605" y="172" width="170" height="60" rx="8"/>
+  <text class="t" x="690" y="196" text-anchor="middle">ClipPanel (.rml)</text>
+  <text class="s" x="690" y="216" text-anchor="middle">toolbar · engine://clip-*</text>
+  <rect class="box" x="790" y="172" width="170" height="60" rx="8"/>
+  <text class="t" x="875" y="196" text-anchor="middle">ClipView [Tool]</text>
+  <text class="s" x="875" y="216" text-anchor="middle">SubViewports, input</text>
+
+  <rect class="box" x="420" y="250" width="170" height="60" rx="8"/>
+  <text class="t" x="505" y="274" text-anchor="middle">ClipTimelineCanvas</text>
+  <text class="s" x="505" y="294" text-anchor="middle">Node2D DrawRect / Line</text>
+  <rect class="box" x="605" y="250" width="170" height="60" rx="8"/>
+  <text class="t" x="690" y="274" text-anchor="middle">ClipPreview</text>
+  <text class="s" x="690" y="294" text-anchor="middle">decoder → texture + voice</text>
+  <rect class="box" x="790" y="250" width="170" height="60" rx="8"/>
+  <text class="t" x="875" y="274" text-anchor="middle">ClipExportJob</text>
+  <text class="s" x="875" y="294" text-anchor="middle">polled like SongRenderJob</text>
+
+  <text class="s" x="420" y="342">Editor assembly only.</text>
+  <text class="s" x="420" y="360">Gestures and undo match</text>
+  <text class="s" x="420" y="378">Cutback's TimelineControl.</text>
+
+  <!-- ffmpeg -->
+  <rect class="ext" x="400" y="430" width="580" height="54" rx="8"/>
+  <text class="t" x="690" y="453" text-anchor="middle">ffmpeg: user-installed, or an LGPL build shipped with the editor</text>
+  <text class="s" x="690" y="472" text-anchor="middle">child process for decode, waveform and export · never linked · libx264 only if the user's build has it</text>
+
+  <!-- Arrows -->
+  <path class="line" d="M340,100 C 370,90 380,70 398,64" marker-end="url(#arrow)"/>
+  <path class="line" d="M340,140 C 370,150 380,180 398,190" marker-end="url(#arrow)"/>
+  <line class="line" x1="690" y1="310" x2="690" y2="428" marker-end="url(#arrow)"/>
+  <line class="line" x1="875" y1="310" x2="875" y2="428" marker-end="url(#arrow)"/>
+  <line class="line" x1="505" y1="232" x2="505" y2="248" marker-end="url(#arrow)"/>
+  <line class="line" x1="690" y1="232" x2="690" y2="248" marker-end="url(#arrow)"/>
+  <line class="line" x1="875" y1="232" x2="875" y2="248" marker-end="url(#arrow)"/>
+</svg>

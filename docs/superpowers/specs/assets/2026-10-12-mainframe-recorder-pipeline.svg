@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500" width="1000" height="500" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>GameRecorder pipeline: video, audio and event streams</title>
+  <style>
+    .bg { fill: #ffffff; }
+    .box { fill: #f6f8fa; stroke: #818b98; stroke-width: 1.5; }
+    .clock { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.5; }
+    .ext { fill: #ffebe9; stroke: #cf222e; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .file { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .tmp { fill: none; stroke: #9a6700; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .row { font-size: 12px; font-weight: 700; fill: #59636e; letter-spacing: 0.08em; }
+    .t { font-size: 14px; font-weight: 600; fill: #1f2328; }
+    .s { font-size: 12px; fill: #59636e; }
+    .line { stroke: #59636e; stroke-width: 1.5; fill: none; }
+    .ah { fill: #59636e; }
+    .live { fill: #1a7f37; } .off { fill: #0969da; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      .box { fill: #151b23; stroke: #656c76; }
+      .clock { fill: #0c2d6b; stroke: #4493f8; }
+      .ext { fill: #3a1418; stroke: #f85149; }
+      .file { fill: #2e2510; stroke: #d29922; }
+      .tmp { stroke: #d29922; }
+      .t { fill: #f0f6fc; } .s, .row { fill: #9198a1; }
+      .line { stroke: #9198a1; } .ah { fill: #9198a1; }
+      .live { fill: #3fb950; } .off { fill: #4493f8; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="ah"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1000" height="500"/>
+
+  <!-- Clock -->
+  <rect class="clock" x="260" y="14" width="460" height="40" rx="8"/>
+  <text class="t" x="490" y="31" text-anchor="middle">RecordingClock (every stream is stamped with it)</text>
+  <text class="s" x="490" y="47" text-anchor="middle"><tspan class="live">live:</tspan> monotonic since Start  ·  <tspan class="off">offline:</tspan> frame index ÷ fps</text>
+
+  <!-- Video row -->
+  <text class="row" x="20" y="82">VIDEO · main thread</text>
+  <rect class="box" x="20" y="90" width="200" height="70" rx="8"/>
+  <text class="t" x="120" y="118" text-anchor="middle">Swapchain image</text>
+  <text class="s" x="120" y="138" text-anchor="middle">scene + game UI, no dev overlay</text>
+
+  <rect class="box" x="260" y="90" width="220" height="70" rx="8"/>
+  <text class="t" x="370" y="114" text-anchor="middle">Capture ring × 3 (BGRA)</text>
+  <text class="s" x="370" y="132" text-anchor="middle">copy now, read slot N−2 after</text>
+  <text class="s" x="370" y="149" text-anchor="middle">its fence has already signalled</text>
+
+  <rect class="box" x="520" y="90" width="200" height="70" rx="8"/>
+  <text class="t" x="620" y="114" text-anchor="middle">Frame scheduler</text>
+  <text class="s" x="620" y="132" text-anchor="middle"><tspan class="live">live:</tspan> dup / drop to CFR</text>
+  <text class="s" x="620" y="149" text-anchor="middle"><tspan class="off">offline:</tspan> 1 in, 1 out, waits</text>
+
+  <rect class="ext" x="780" y="90" width="200" height="70" rx="8"/>
+  <text class="t" x="880" y="114" text-anchor="middle">ffmpeg encode</text>
+  <text class="s" x="880" y="132" text-anchor="middle">stdin rawvideo bgra →</text>
+  <text class="s" x="880" y="149" text-anchor="middle">hw H.264/HEVC → temp .mkv</text>
+
+  <!-- Audio row -->
+  <text class="row" x="20" y="202">AUDIO · audio thread → writer thread</text>
+  <rect class="box" x="20" y="210" width="200" height="70" rx="8"/>
+  <text class="t" x="120" y="238" text-anchor="middle">AudioMixRoot</text>
+  <text class="s" x="120" y="258" text-anchor="middle">GenerateAudio, after Mix</text>
+
+  <rect class="box" x="260" y="210" width="220" height="70" rx="8"/>
+  <text class="t" x="370" y="234" text-anchor="middle">Mix tap</text>
+  <text class="s" x="370" y="252" text-anchor="middle"><tspan class="live">live:</tspan> SPSC ring, player still hears</text>
+  <text class="s" x="370" y="269" text-anchor="middle"><tspan class="off">offline:</tspan> RenderNullDevice per frame</text>
+
+  <rect class="box" x="520" y="210" width="200" height="70" rx="8"/>
+  <text class="t" x="620" y="234" text-anchor="middle">WavWriter → temp .wav</text>
+  <text class="s" x="620" y="252" text-anchor="middle"><tspan class="off">offline:</tspan> through frame n write</text>
+  <text class="s" x="620" y="269" text-anchor="middle">round(n · 48000 ÷ fps) samples</text>
+
+  <rect class="ext" x="780" y="210" width="200" height="70" rx="8"/>
+  <text class="t" x="880" y="234" text-anchor="middle">ffmpeg mux on Stop</text>
+  <text class="s" x="880" y="252" text-anchor="middle">-c:v copy + AAC 192k</text>
+  <text class="s" x="880" y="269" text-anchor="middle">seconds, not minutes</text>
+
+  <path class="file" d="M790,300 h160 l20,20 v24 h-180 z"/>
+  <text class="t" x="880" y="328" text-anchor="middle">recording.mp4</text>
+
+  <!-- Events row -->
+  <text class="row" x="20" y="392">EVENTS · main thread</text>
+  <rect class="box" x="20" y="400" width="200" height="80" rx="8"/>
+  <text class="s" x="120" y="422" text-anchor="middle">DispatchInput: any player input</text>
+  <text class="s" x="120" y="438" text-anchor="middle">IsLoading (polled per frame)</text>
+  <text class="s" x="120" y="454" text-anchor="middle">Paused (polled per frame)</text>
+  <text class="s" x="120" y="470" text-anchor="middle">Recorder.Mark · Keep · Skip</text>
+
+  <rect class="box" x="260" y="400" width="220" height="80" rx="8"/>
+  <text class="t" x="370" y="430" text-anchor="middle">Span builder</text>
+  <text class="s" x="370" y="450" text-anchor="middle">open / close on clock time;</text>
+  <text class="s" x="370" y="466" text-anchor="middle">input holds a span open 250 ms</text>
+
+  <rect class="box" x="520" y="400" width="200" height="80" rx="8"/>
+  <text class="t" x="620" y="430" text-anchor="middle">SidecarWriter</text>
+  <text class="s" x="620" y="450" text-anchor="middle">spans + markers, written</text>
+  <text class="s" x="620" y="466" text-anchor="middle">atomically after the mux</text>
+
+  <path class="file" d="M780,416 h180 l20,20 v32 h-200 z"/>
+  <text class="t" x="880" y="448" text-anchor="middle">recording.mp4.mfcap.json</text>
+
+  <!-- Arrows -->
+  <line class="line" x1="220" y1="125" x2="258" y2="125" marker-end="url(#arrow)"/>
+  <line class="line" x1="480" y1="125" x2="518" y2="125" marker-end="url(#arrow)"/>
+  <line class="line" x1="720" y1="125" x2="778" y2="125" marker-end="url(#arrow)"/>
+  <line class="line" x1="880" y1="160" x2="880" y2="208" marker-end="url(#arrow)"/>
+  <line class="line" x1="220" y1="245" x2="258" y2="245" marker-end="url(#arrow)"/>
+  <line class="line" x1="480" y1="245" x2="518" y2="245" marker-end="url(#arrow)"/>
+  <line class="line" x1="720" y1="245" x2="778" y2="245" marker-end="url(#arrow)"/>
+  <line class="line" x1="880" y1="280" x2="880" y2="298" marker-end="url(#arrow)"/>
+  <line class="line" x1="220" y1="440" x2="258" y2="440" marker-end="url(#arrow)"/>
+  <line class="line" x1="480" y1="440" x2="518" y2="440" marker-end="url(#arrow)"/>
+  <line class="line" x1="720" y1="440" x2="778" y2="440" marker-end="url(#arrow)"/>
+</svg>
