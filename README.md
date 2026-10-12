@@ -185,6 +185,13 @@ branch.
    kept section starts at the previous keyframe, so it is approximate. The extension picks the
    container: `.mp4`, `.mov`, `.mkv`, `.webm`.
 
+### Mainframe Engine recordings
+
+Videos recorded with Mainframe Engine's `--record` come with a `.mfcap.json` file that says when the
+player was idle, when a loading screen or pause menu was up, and what the game marked. Open the video
+and click **Detect idle gameplay** (the gamepad button) to cut all of that in one step; markers
+appear in the timeline ruler. Tune it in Preferences → Gameplay detection.
+
 ## Project layout
 
 ```

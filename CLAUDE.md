@@ -79,8 +79,9 @@ Cutback/
 ├── src/
 │   ├── Cutback.Core/              # NO UI, NO ffmpeg dependencies. Pure logic.
 │   │   ├── Models/                # Segment, Word, CutbackProject
+│   │   ├── Capture/               # Mainframe Engine .mfcap.json sidecar reader
 │   │   ├── SegmentList.cs         # the partition invariant lives here
-│   │   ├── Detection/             # SilenceCutPlanner, FillerDetector, FillerCutPlanner
+│   │   ├── Detection/             # SilenceCutPlanner, FillerDetector, FillerCutPlanner, GameplayCutPlanner
 │   │   ├── Transcript/            # TranscriptView, OutputTimeline, TranscriptExporter
 │   │   └── Projects/              # save / load / migrate
 │   ├── Cutback.Media/             # everything that shells out to ffmpeg
@@ -121,7 +122,7 @@ A project is a JSON file (`.cutback`). Schema:
 
 ```jsonc
 {
-  "version": 2,
+  "version": 3,
   "source": {
     "path": "/abs/path/to/recording.mp4",
     "sha256": "…",              // first 8MB + file size, not the whole file
@@ -164,8 +165,10 @@ This is deliberate. It means:
 Operations on `SegmentList` (`Split`, `MoveBoundary`, `Toggle`, `MergeAdjacentSameState`) must preserve
 this. Assert it at the end of every mutating operation in Debug. Unit tests cover it.
 
-`origin` is `auto | manual | claude | filler` and exists so the UI can show why a cut was made and
-so a re-analysis can replace its own cuts without touching anyone else's. **Re-running detection
+`origin` is `auto | manual | claude | filler | gameplay` and exists so the UI can show why a cut was made and
+so a re-analysis can replace its own cuts without touching anyone else's. When a dissolve merges two
+neighbours, `MergeOrigin` picks the stronger origin: Manual > Claude > Filler > Gameplay > Auto (so
+Detect silence cannot delete a gameplay cut that merged with an auto one). **Re-running detection
 must never discard manual edits.** What counts as a manual edit: **`Toggle` marks the segment
 manual; `MoveBoundary` marks only disabled neighbours manual; `Split` marks nothing** (it inherits
 origin); **`SetRange` (drag to draw a section, or click / drag in the transcript) marks the new
@@ -176,9 +179,9 @@ and locking kept regions would stop re-detection from finding new silences insid
 around them. `ApplyFillerCuts` (filler words) dissolves the previous `filler` segments and carves
 the new cuts into whatever is there; `FillerCutPlanner` drops any candidate that touches a
 `manual` segment, so the two detectors leave each other's and the user's cuts alone.
+`ReplaceOriginCuts(Gameplay)` (Detect idle gameplay) works the same way as filler cuts, but `GameplayCutPlanner` *clips* manual segments out of its cuts instead of dropping the cut, because gameplay cuts are long.
 
-Schema version 2 added the `filler` origin. The 1→2 migration is a no-op; the bump exists so an
-older build refuses the file with its "newer version" message instead of a deserialisation error.
+Schema version 2 added the `filler` origin and version 3 the `gameplay` origin. Both migrations are no-ops; the bumps exist so an older build refuses the file with its "newer version" message instead of a deserialisation error.
 
 `sha256` is used to warn the user when the source file has changed or moved. It does not block opening.
 
@@ -234,6 +237,20 @@ before the anchor / 300 ms after it. The pipeline is `FillerDetector` → `Fille
 back to the snapped heuristic span for words without anchors) → `FillerCutPlanner` →
 `ApplyFillerCuts`, one undo step. Transcripts made before anchors existed still work, and the
 status line tells the user to transcribe again for aligned cuts.
+
+### Mainframe Engine recordings
+
+A video recorded by Mainframe Engine has a sidecar next to it: `<video file name>.mfcap.json`
+(format `mainframe-capture`, version 1; the engine owns it, see the integration spec). It lists
+player-input spans, loading and pause spans, the game's Keep/Skip spans and markers, on the
+video's own timeline. `CaptureSidecarSerializer.TryLoadForVideoAsync` reads it when the video
+opens; a bad or newer sidecar is a warning, never a failed open. **Detect idle gameplay** runs
+`GameplayCutPlanner` → `ReplaceOriginCuts(Gameplay)`, one undo step. Idle detection applies to
+`live` recordings only (offline renders have no input); loading, pause and Skip are cut exactly,
+Keep beats Skip, and markers protect ±`MarkerWindowMs` from idle cuts. Settings live in
+`AppSettings` as `Gameplay*` and in File → Preferences → Gameplay detection. The fixture
+`tests/Cutback.Core.Tests/Fixtures/sample.mfcap.json` is byte-identical to the engine's copy; do
+not edit one without the other.
 
 ---
 
@@ -367,7 +384,8 @@ These will cost you hours if you don't know them:
 
 Unit tests cover `Cutback.Core` (the partition invariant including `SetRange`, `Dissolve` and `Restore`,
 `EditHistory`, detection planning, project round-trip serialisation, version migration, source hashing,
-filler detection and planning, transcript cut-state, output timeline, transcript exporters) and the
+filler detection and planning, capture sidecar reading, gameplay cut planning, `ReplaceOriginCuts`,
+transcript cut-state, output timeline, transcript exporters) and the
 ffmpeg-independent parts of `Cutback.Media`
 (`FfmpegLocator` resolution order, `PeakReducer`, waveform levels and snapping, the silencedetect and
 `-progress` parsers, `FfmpegCapabilities` version parsing, `KeyframeSnapper`, and `FilterGraphBuilder`
@@ -393,6 +411,11 @@ Precise export mode links **libx264, which is GPL**. That makes the distributed 
 makes this application GPL. The project is therefore **GPL-3.0** and every dependency must be
 compatible: Avalonia (MIT), FFMpegCore (MIT), CommunityToolkit.Mvvm (MIT), SkiaSharp (MIT), LibVLCSharp
 (LGPL-2.1+) all are. Before adding any new dependency, check the licence.
+
+**Exception: `Cutback.Core` and `Cutback.Media` are MIT** (each has its own `LICENSE` and
+`PackageLicenseExpression`), packed as NuGet packages on every release, so Mainframe Engine's
+MIT editor can use them. Neither may take a dependency that is not MIT-compatible. Cutback
+never bundles or links ffmpeg; it runs the user's.
 
 Ship a `THIRD-PARTY-NOTICES.md` and keep it current.
 

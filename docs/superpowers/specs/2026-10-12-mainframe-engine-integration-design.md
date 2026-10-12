@@ -309,7 +309,7 @@ is a no-op, registered exactly like 1→2.
 
 ![Gameplay planner example](assets/2026-10-12-mainframe-gameplay-planner.svg)
 
-1. *Idle* = the complement of `input` within `[0, duration]`.
+1. *Idle* = the complement of `input` within `[0, duration]`. **Live recordings only**; an offline recording has no input, so only steps 4–6 apply.
 2. Subtract `keep` spans, and each marker's `±MarkerWindowMs` window, from idle.
 3. Drop idle pieces shorter than `MinIdleMs`, then shrink the rest by `PaddingMs` at each end. The
    padding is generous because it gives a lead-in, not because consonants need protecting.
@@ -317,10 +317,11 @@ is a no-op, registered exactly like 1→2.
    Subtract `keep` from them (Keep beats Skip). Markers do not override Skip.
 5. Union of 3 and 4, then bridge kept gaps shorter than `MinKeepMs` (the same rule as
    `SilenceCutPlanner`; the merge loop moves into a shared internal `CutMerger` used by both).
-6. Drop any cut that touches a `Manual` segment (the same rule as `FillerCutPlanner`).
+6. Subtract `Manual` segments from every cut (clip, do not drop: gameplay cuts are long). Drop pieces shorter than `SegmentList.MinSegmentLength`.
 
 Reasons are `idle 3.5s`, `loading 4.5s`, `paused 4.0s`, `skip: <label>`, and joined with ` + ` when
-a merged cut has several (`loading + idle 7.0s`).
+a merged cut has several (`loading + idle 7.0s`). An idle stretch wholly inside a loading, pause or skip
+span is not named in the reason.
 
 **`SegmentList`.** `ApplyFillerCuts` becomes a wrapper around a new general
 `ReplaceOriginCuts(SegmentOrigin origin, IEnumerable<PlannedCut> cuts)`, and `DissolveFillerCore`
@@ -354,8 +355,7 @@ The invariant is asserted as in every other mutating operation.
   - Markers draw as small triangles in the ruler with a `TimelineMarker` colour resource from
     `Theme.axaml`.
   - The label appears in the existing hover readout. Scrubbing the ruler already seeks to them.
-- **Command-line open.** `Cutback <file>` opens a `.cutback` project, or any other file as a video,
-  through the same paths as the Open dialogs. Phase 3 relies on this. No single-instance handling.
+- **Command-line open** already exists (`App.axaml.cs` opens the first existing path in `desktop.Args`), and Phase 3 relies on it unchanged.
 
 ### 2.4 Docs (Cutback)
 
