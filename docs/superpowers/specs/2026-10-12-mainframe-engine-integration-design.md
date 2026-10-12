@@ -128,7 +128,7 @@ happens after the slot's fence wait. The steps are:
    **that wait proves the copy finished**, so the slot's mapped memory is complete. The renderer hands the
    sink a `ReadOnlySpan<byte>` over it plus the timestamp. **There is no extra fence wait and no swizzle.**
    `EndStream` and a resize flush the pending slots oldest first (the only places that wait).
-3. The consumer copies the span into a pooled buffer (`ArrayPool`, one copy, about 1 ms at 1080p) and
+3. The consumer copies the span into a pooled buffer (`ArrayPool`, one copy; its cost was not measured) and
    queues it for the writer thread. The bounded queue holds 4 buffers.
 
 The existing blocking `CaptureFrame` stays as it is for screenshots.
@@ -254,8 +254,10 @@ Each event holds the `input` span open for 250 ms, and a held key or button keep
 built by `CaptureTimeline` (pure; called `SpanBuilder` in the first sketch).
 
 **HUD.** The recorder forces the dev overlay off while recording. Games that want a clean feed check
-`Recorder.IsRecording` (or subscribe to `Started`/`Stopped`) and hide their HUD themselves. Forest
-gets a `--no-hud` game flag as the worked example.
+`Recorder.IsRecording` (or subscribe to `Started`/`Stopped`) and hide their HUD themselves. As built, the
+worked example is the Forest's `FpsHud`: it subscribes to `Recorder.Started` and `Stopped` in `OnReady`
+(with a catch-up for a recording that is already running), hides itself on `Started`, and on `Stopped`
+restores the visibility the player had. There is no `--no-hud` flag.
 
 ### 1.7 Sidecar format, version 1
 
@@ -299,7 +301,7 @@ Rules:
 All tests are pure; ffmpeg is never run:
 - `FrameScheduler` (dup/drop sequences at 30, 60, 120 Hz input; writer-full drops);
 - `SampleScheduler` (totals exact over 10 000 frames at 24/25/30/50/60/144 fps);
-- `SpanBuilder` (hold, 250 ms tail, overlap);
+- `CaptureTimeline` (hold, 250 ms tail, overlap);
 - `EncoderSelector` over captured `-encoders` text from each OS;
 - `GameHostOptions` parsing of the new flags;
 - the ffmpeg argument builders, asserted as strings;
@@ -363,7 +365,8 @@ Each becomes a kept `Auto` segment (keeping its id) and joins only immediately a
 are also kept and `Auto`, so withdrawing never changes a disabled, manual, filler or Claude neighbour
 and the footage a stale cut covered is never left cut. Filler cuts still dissolve into their neighbours,
 but never merge two kept neighbours of different origins into one (that would spread a neighbour's
-`Manual` origin over the other's footage). (`DissolveFillerCore` therefore does not become a general
+`Manual` origin over the other's footage). (`DissolveFillerCore` was replaced by the private
+`DissolveDetectorCutCore`, which `ReplaceOriginCuts` uses for the non-gameplay origins, not by a general
 `DissolveOriginCore`; see `ReplaceOriginCuts` in `src/Cutback.Core/SegmentList.cs`.) `ReplaceAutoSegments` already preserves every non-`auto` segment, so:
 - silence re-detection keeps gameplay cuts;
 - gameplay re-detection keeps silence and filler cuts;
