@@ -258,14 +258,14 @@ public sealed class SegmentList
     }
 
     /// <summary>
-    /// <see cref="DissolveCore"/>, but used only by <see cref="ApplyFillerCuts"/>: two kept
+    /// <see cref="DissolveCore"/>, but used only by <see cref="ReplaceOriginCuts"/>: two kept
     /// neighbours merge into one segment only if they also share the same <see cref="Segment.Origin"/>.
     /// When their origins differ (e.g. a kept <see cref="SegmentOrigin.Manual"/> sliver next to a
     /// kept <see cref="SegmentOrigin.Auto"/> region), the region instead joins its left neighbour, or
     /// its only neighbour at either end of the timeline, and both neighbours keep their own origin
     /// rather than one spreading over the other.
     /// </summary>
-    private bool DissolveFillerCore(int index)
+    private bool DissolveDetectorCutCore(int index)
     {
         if (_segments.Count < 2)
         {
@@ -484,25 +484,40 @@ public sealed class SegmentList
     }
 
     /// <summary>
-    /// Applies a fresh filler-word detection result. Every existing <see cref="SegmentOrigin.Filler"/>
-    /// segment is dissolved into its neighbours first, so a re-run replaces the previous result,
-    /// then each cut is carved out of whatever is there with <see cref="SegmentOrigin.Filler"/>.
-    /// Auto and manual segments outside the cuts are untouched; the caller is responsible for not
-    /// passing cuts that overlap manual segments (see <c>FillerCutPlanner</c>). Dissolving a filler
-    /// cut here never merges two kept neighbours of different origins into one: that would spread a
-    /// neighbour's <see cref="SegmentOrigin.Manual"/> origin over the other's footage and lock it
+    /// Applies a fresh filler-word detection result: <see cref="ReplaceOriginCuts"/> with
+    /// <see cref="SegmentOrigin.Filler"/>. The caller is responsible for not passing cuts that
+    /// overlap manual segments (see <c>FillerCutPlanner</c>).
+    /// </summary>
+    /// <returns>The number of cuts applied.</returns>
+    public int ApplyFillerCuts(IEnumerable<PlannedCut> cuts) => ReplaceOriginCuts(SegmentOrigin.Filler, cuts);
+
+    /// <summary>
+    /// Applies a fresh result from a detector that carves cuts into the existing partition
+    /// (filler words, gameplay). Every existing segment of <paramref name="origin"/> is dissolved
+    /// into its neighbours first, so a re-run replaces the previous result, then each cut is carved
+    /// out of whatever is there with that origin. Segments of other origins outside the cuts are
+    /// untouched; the caller is responsible for not passing cuts that overlap manual segments.
+    /// Dissolving never merges two kept neighbours of different origins into one: that would spread
+    /// a neighbour's <see cref="SegmentOrigin.Manual"/> origin over the other's footage and lock it
     /// from future re-detection. Same-origin neighbours still merge, exactly as <see cref="Dissolve"/>
     /// would.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="origin"/> is <see cref="SegmentOrigin.Auto"/>
+    /// (re-laid by <see cref="ReplaceAutoSegments"/>) or <see cref="SegmentOrigin.Manual"/> (never replaced in bulk).</exception>
     /// <returns>The number of cuts applied.</returns>
-    public int ApplyFillerCuts(IEnumerable<PlannedCut> cuts)
+    public int ReplaceOriginCuts(SegmentOrigin origin, IEnumerable<PlannedCut> cuts)
     {
         ArgumentNullException.ThrowIfNull(cuts);
+        if (origin is SegmentOrigin.Auto or SegmentOrigin.Manual)
+        {
+            throw new ArgumentOutOfRangeException(nameof(origin), origin,
+                "Auto segments are re-laid by ReplaceAutoSegments, and manual segments are never replaced in bulk.");
+        }
 
         var changed = false;
         for (var i = _segments.Count - 1; i >= 0; i--)
         {
-            if (_segments[i].Origin == SegmentOrigin.Filler && DissolveFillerCore(i))
+            if (_segments[i].Origin == origin && DissolveDetectorCutCore(i))
             {
                 changed = true;
             }
@@ -511,7 +526,7 @@ public sealed class SegmentList
         var applied = 0;
         foreach (var cut in cuts.OrderBy(c => c.Start))
         {
-            if (SetRangeCore(cut.Start, cut.End, enabled: false, SegmentOrigin.Filler, cut.Reason) >= 0)
+            if (SetRangeCore(cut.Start, cut.End, enabled: false, origin, cut.Reason) >= 0)
             {
                 applied++;
                 changed = true;
@@ -636,7 +651,11 @@ public sealed class SegmentList
         }
     }
 
-    /// <summary>Manual wins over everything, then Claude, then Filler, then Auto.</summary>
+    /// <summary>
+    /// Manual wins over everything, then Claude, then Filler, then Gameplay, then Auto. Every origin
+    /// that re-detection preserves must outrank Auto, or merging it with an auto cut would let the
+    /// next Detect silence silently delete it.
+    /// </summary>
     private static SegmentOrigin MergeOrigin(SegmentOrigin a, SegmentOrigin b)
     {
         if (a == SegmentOrigin.Manual || b == SegmentOrigin.Manual)
@@ -652,6 +671,11 @@ public sealed class SegmentList
         if (a == SegmentOrigin.Filler || b == SegmentOrigin.Filler)
         {
             return SegmentOrigin.Filler;
+        }
+
+        if (a == SegmentOrigin.Gameplay || b == SegmentOrigin.Gameplay)
+        {
+            return SegmentOrigin.Gameplay;
         }
 
         return SegmentOrigin.Auto;
