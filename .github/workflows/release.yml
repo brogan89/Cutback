@@ -208,9 +208,34 @@ jobs:
           path: artifacts/dist/*
           if-no-files-found: error
 
+  packages:
+    name: NuGet packages (MIT libraries)
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Pack
+        run: |
+          for project in src/Cutback.Core src/Cutback.Media; do
+            dotnet pack "$project" -c Release -p:Version="$VERSION" -p:ContinuousIntegrationBuild=true -o artifacts/packages
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Cutback-${{ env.VERSION }}-packages
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error
+
   release:
     name: GitHub Release
-    needs: [version, build]
+    needs: [version, build, packages]
     if: needs.version.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
