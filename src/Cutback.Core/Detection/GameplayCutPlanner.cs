@@ -8,8 +8,9 @@ namespace Cutback.Core.Detection;
 /// Turns a Mainframe Engine recording's sidecar into cuts. Idle stretches (no player input, live
 /// recordings only) longer than the minimum are cut with padding; loading screens, pauses and the
 /// game's Skip spans are cut exactly; Keep spans and the windows around markers are never cut for
-/// idleness, and Keep also beats Skip. Results are merged with the shared minimum-keep rules, and
-/// manual segments are clipped out so a re-run never undoes the user's edits. Pure.
+/// idleness, and Keep also beats Skip. Results are merged with the shared minimum-keep rules, then
+/// manual segments and Keep spans are clipped out of the merged cuts, so a re-run never undoes the
+/// user's edits and merging can never cut a Keep span. Pure.
 /// </summary>
 public static class GameplayCutPlanner
 {
@@ -58,8 +59,10 @@ public static class GameplayCutPlanner
         var merged = CutMerger.Merge(pieces.Select(p => (p.Start, p.End)), minKeep, duration);
         var manual = current.Where(s => s.Origin == SegmentOrigin.Manual).Select(s => (s.Start, s.End)).ToList();
 
+        // Keep was subtracted from the pieces, but merging bridges short kept gaps and absorbs slivers
+        // at the file's edges, which can put a Keep span back inside a cut. Subtract it again.
         var result = new List<PlannedCut>();
-        foreach (var (start, end) in Intervals.Subtract(merged, manual))
+        foreach (var (start, end) in Intervals.Subtract(merged, manual.Concat(keep)))
         {
             if (end - start >= SegmentList.MinSegmentLength)
             {

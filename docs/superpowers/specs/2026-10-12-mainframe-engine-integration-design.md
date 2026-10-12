@@ -317,7 +317,7 @@ is a no-op, registered exactly like 1→2.
    Subtract `keep` from them (Keep beats Skip). Markers do not override Skip.
 5. Union of 3 and 4, then bridge kept gaps shorter than `MinKeepMs` (the same rule as
    `SilenceCutPlanner`; the merge loop moves into a shared internal `CutMerger` used by both).
-6. Subtract `Manual` segments from every cut (clip, do not drop: gameplay cuts are long). Drop pieces shorter than `SegmentList.MinSegmentLength`.
+6. Subtract `Manual` segments **and `keep` spans** from every merged cut (clip, do not drop: gameplay cuts are long). Keep is applied again after merging so that bridging or end-of-file absorption can never cut it. Drop pieces shorter than `SegmentList.MinSegmentLength`.
 
 Reasons are `idle 3.5s`, `loading 4.5s`, `paused 4.0s`, `skip: <label>`, and joined with ` + ` when
 a merged cut has several (`loading + idle 7.0s`). An idle stretch wholly inside a loading, pause or skip

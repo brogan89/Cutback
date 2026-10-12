@@ -65,6 +65,28 @@ public sealed class GameplayCutPlannerTests
     }
 
     [Fact]
+    public void Keep_at_the_start_is_not_absorbed_by_the_min_keep_sliver_rule()
+    {
+        // The 0.8 s kept logo is shorter than MinKeep, so merging alone would extend the cut back to 0
+        // (and the 0.5 s tail out to the end of the file). Keep is subtracted again afterwards.
+        var capture = Capture(10, mode: CaptureMode.Offline, loading: [new(0.8, 9.5)], keep: [new(0, 0.8, "logo")]);
+
+        Shape(GameplayCutPlanner.Plan(capture, Untouched(10), GameplaySettings.Default, 10))
+            .Should().Equal((0.8, 10.0, "loading 9.2s"));
+    }
+
+    [Fact]
+    public void A_short_keep_between_two_cuts_is_not_bridged()
+    {
+        var capture = Capture(20, mode: CaptureMode.Offline,
+            loading: [new(2, 5), new(5.5, 9)], keep: [new(5, 5.5, "beat")]);
+
+        Shape(GameplayCutPlanner.Plan(capture, Untouched(20), GameplaySettings.Default, 20)).Should().Equal(
+            (2.0, 5.0, "loading 3.0s"),
+            (5.5, 9.0, "loading 3.5s"));
+    }
+
+    [Fact]
     public void Markers_do_not_override_skip()
     {
         var capture = Capture(30, input: [new(0, 30)], loading: [new(10, 20)], markers: [new(15, "x")]);
