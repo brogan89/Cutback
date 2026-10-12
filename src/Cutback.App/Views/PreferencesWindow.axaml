@@ -5,7 +5,7 @@
         x:DataType="vm:PreferencesViewModel"
         Title="Preferences"
         Classes="dialog"
-        Width="520" Height="500"
+        Width="520" Height="560"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
