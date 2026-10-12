@@ -70,12 +70,16 @@ records the rejected options: linking libav*, bundling ffmpeg in games, and a na
 
 | Flag | Meaning |
 |---|---|
-| `--record <file.mp4>` | Record from the first frame until quit or `Recorder.Stop()`. Implies frame capture. |
-| `--record-scale <n>` | Sets `EngineOptions.ContentScale` (e.g. a 1920×1080-point window at 2 is 3840×2160 px). Intended for offline mode. |
+| `--record <file.mp4>` | Record from the **first update** (as built: this keeps the gap between creating and showing the window out of the video, and the start scene's loading is recorded as `loading` spans) until quit or `Recorder.Stop()`. Implies frame capture. |
+| `--record-scale <n>` | Sets `EngineOptions.ContentScale` (e.g. a 1920×1080-point window at 2 is 3840×2160 px). Intended for offline mode. **Display-limited:** the engine refuses to start when the display cannot hold the scaled window, so a 1920×1080-point window at scale 2 fails on a smaller display. `ContentScale` does *not* give 4K on any display; offline 4K capture depends on the machine. |
 | `--ffmpeg <path>` | ffmpeg to use (the editor passes its preference). |
 
-Mode is implied: **`--fixed-fps` present ⇒ offline, otherwise live.** `--max-frames` ends an
-offline recording exactly.
+Mode is implied: **`--fixed-fps` present ⇒ offline, otherwise live.** `--max-frames` counts *loaded*
+frames only, and the recorder also records loading, so an offline video is longer than `--max-frames`
+(the Forest smoke run at `--max-frames 3600` wrote 7.3 s of loading plus exactly 60 s).
+
+**Exit code.** An offline `--record` run (a capture script or CI job, whose whole purpose is the file)
+whose recording ends with an error exits non-zero. A live run logs the error and keeps playing.
 
 **API** (`SceneTree.Recorder`, a `GameRecorder`; null under `--headless`):
 
@@ -100,7 +104,8 @@ public sealed class GameRecorder
 
 ### 1.2 Clock
 
-`RecordingClock` gives every stream one timeline:
+One clock gives every stream one timeline (as built: `GameRecorder.Now()` over the main-thread
+`CaptureTimeline`, not a separate `RecordingClock` type):
 
 - **Live:** seconds of a monotonic `Stopwatch` since `Start`.
 - **Offline:** `frameIndex / fps`, exactly. Game time already advances by `1/fps` per update under
@@ -111,14 +116,18 @@ Every sidecar time is on this clock, which is the output video's timeline.
 ### 1.3 Video
 
 **Capture ring (VulkanRenderer).** A streaming variant of the existing capture:
-`BeginCaptureStream(int slots = 3)` / `EndCaptureStream()`. `MaxFramesInFlight` is 2, so 3 host-visible
-buffers are enough. The steps are:
+`IFrameStreamSource.BeginStream(sink)` / `EndStream()` (as built, replacing the `BeginCaptureStream` /
+`EndCaptureStream` sketched here). `MaxFramesInFlight` is 2, so there is **one host-visible buffer per
+frame in flight (2)**, not 3: each slot's buffer is only rewritten by that slot's own next frame, which
+happens after the slot's fence wait. The steps are:
 
-1. `EndFrame` records the same barrier + `CmdCopyImageToBuffer` as `RecordCapture`, into slot
-   `frame % 3`, and stores the frame's clock time with the slot.
-2. When `BeginFrame` has waited on a frame's fence (which it already does to reuse that frame's
-   resources), that slot's mapped memory is complete. The renderer hands the consumer a
-   `ReadOnlySpan<byte>` over it plus the timestamp. **There is no extra fence wait and no swizzle.**
+1. `EndFrame` records the same barrier + `CmdCopyImageToBuffer` as `RecordCapture`, into the slot's own
+   buffer, and stores the frame's clock time with the slot. A slot counts as pending only once its frame
+   was submitted successfully.
+2. `BeginFrame` waits on the slot's fence (which it already does to reuse that frame's resources), and
+   **that wait proves the copy finished**, so the slot's mapped memory is complete. The renderer hands the
+   sink a `ReadOnlySpan<byte>` over it plus the timestamp. **There is no extra fence wait and no swizzle.**
+   `EndStream` and a resize flush the pending slots oldest first (the only places that wait).
 3. The consumer copies the span into a pooled buffer (`ArrayPool`, one copy, about 1 ms at 1080p) and
    queues it for the writer thread. The bounded queue holds 4 buffers.
 
@@ -139,29 +148,42 @@ written, so the output is constant frame rate:
   frame written gets the missing copies, so length and sync hold and only smoothness suffers. The
   count goes in the sidecar (`droppedFrames`) and in `RecordingResult`.
 
+**Odd dimensions.** yuv420p needs even sizes, so an odd width or height is cropped by one pixel in
+the encoder (`crop=<w&~1>:<h&~1>`). The sidecar reports the swapchain's size.
+
 **Window size.** If the swapchain extent changes during a recording (resize, fullscreen toggle),
 the recording stops cleanly with the reason "window size changed". Everything up to that point is
-kept.
+kept. As built, this fires only when the extent actually changes: a same-size recreation (a VSync
+toggle) keeps recording. Any resize therefore ends a `--record` run, which includes a game that
+resizes after startup (the Forest's `--resolution` dev flag). `BeginStream` throws if a stream is
+already running.
 
 ### 1.4 Audio
 
 **Live: mix tap.** In `AudioMixRoot.GenerateAudio`, after `graph.Mix(buffer, channels); AfterMix(graph);`,
-when a tap is attached, copy `buffer` into an `SpscRing<float>` (2 s capacity), along with the clock
-time of the block. This is the device output (the chain after the root is unity gain), so the player
-still hears everything. The callback stays lock-free and allocation-free (audio.md rules).
+when a tap is attached, copy `buffer` into an `SpscRing<float>` (as built: 2^18 samples, about 2.7 s of
+48 kHz stereo), and stamp the first block's `Stopwatch` time. This is the device output (the chain after
+the root is unity gain), so the player still hears everything. **As built, the tap sits after the mixer's
+fault guard**, so it records exactly what the device plays, including the silence after an audio fault,
+and it is **all-or-nothing per block**: a block that does not fit is dropped whole and counted in
+`OverflowSamples`, never split mid-frame (a partial block would swap L/R for everything after it). The callback stays lock-free and allocation-free (audio.md rules).
 `AudioServer.BeginCapture()` / `EndCapture()` attach and detach the tap.
 
-A writer thread drains the ring into a temp WAV with the existing `WavWriter`:
+The main thread drains the ring (each update and at Stop) into a temp WAV with the **`StreamingWavWriter`**
+(the existing `WavWriter` needs the whole buffer up front; the streaming writer writes a float WAV
+header with zero sizes and patches it at the end):
 
-- Samples stamped before `t0` are dropped, so audio starts on the same instant as frame 0 with
-  sample accuracy.
-- Ring overflow writes silence for the lost span, so the length still matches. It is counted and
-  logged.
+- The first block's timestamp is compared with `t0`, and the gap is written as silence, so audio starts
+  on the same instant as frame 0 to within a device period.
+- Overflow is whole blocks: the recorder writes that many samples of silence, so the length still matches.
+- **The WAV is padded or truncated to the video's exact sample count at Stop, in both modes**, so the
+  video and audio lengths always match.
 
 **Offline: null device.** The engine starts with `AudioDeviceMode.NullManual`. After each update the
 recorder calls `AudioServer.RenderNullDevice(n, span)`, where
 `n = round((f+1) · 48000 / fps) − round(f · 48000 / fps)` for frame `f`. That keeps the total exact
-for any fps (`SampleScheduler`, pure). The player hears nothing in this mode, by design.
+for any fps (`SampleScheduler`, pure). The player hears nothing in this mode, by design. The same
+`StreamingWavWriter` and Stop-time fix-up apply.
 
 ### 1.5 Encoding
 
@@ -174,7 +196,7 @@ no-op. This mirrors Cutback's `FfmpegLocator`. It is duplicated rather than shar
 must not wait for the Phase 2 packages.
 
 **Choosing an encoder (`EncoderSelector`, pure over the parsed output of `ffmpeg -hide_banner -encoders`).**
-The first candidate that passes a 0.1 s probe encode (`-f lavfi -i color=s=64x64 … -f null -`, result
+The first candidate that passes a 0.1 s probe encode (`-f lavfi -i color=s=256x256 … -f null -`, result
 cached for the process) wins:
 
 | OS | Order |
@@ -194,6 +216,10 @@ starts a process.
 **Files.** While recording:
 - video goes to `<out>.partial/video.mkv` (MKV, so a crash leaves a playable file);
 - audio goes to `<out>.partial/audio.wav`.
+
+As built, finalising runs on a thread-pool task: `Stop` returns at once and `Stopped` is raised on the
+main thread by the next update. A recording that captured **zero frames is abandoned** (no mux, no
+sidecar, because Cutback rejects `durationSeconds` 0).
 
 `Stop` runs `ffmpeg -i video.mkv -i audio.wav -c:v copy -c:a aac -b:a 192k -movflags +faststart <out>`,
 writes the sidecar, then deletes `.partial/`. On failure `.partial/` is kept and `RecordingResult.Error`
@@ -216,10 +242,16 @@ Which events count as input:
 - a mouse button;
 - mouse motion over 2 px;
 - a gamepad axis whose magnitude exceeds 0.25 (the recorder's own threshold, independent of
-  `InputAction.Deadzone`).
+  `InputAction.Deadzone`);
+- as built, also: `InputEventAction` (held by action name), `InputEventText`, the mouse wheel, and any
+  event type the recorder does not know (a missed input would cut footage the player was acting in; a
+  false positive only keeps a little idle time).
+
+`InputActivity.Reset()` clears every held control when the window loses focus (Silk `FocusChanged`),
+because a key released in another window never sends its key-up.
 
 Each event holds the `input` span open for 250 ms, and a held key or button keeps it open. Spans are
-built by `SpanBuilder` (pure).
+built by `CaptureTimeline` (pure; called `SpanBuilder` in the first sketch).
 
 **HUD.** The recorder forces the dev overlay off while recording. Games that want a clean feed check
 `Recorder.IsRecording` (or subscribe to `Started`/`Stopped`) and hide their HUD themselves. Forest
@@ -324,9 +356,15 @@ a merged cut has several (`loading + idle 7.0s`). An idle stretch wholly inside 
 span is not named in the reason.
 
 **`SegmentList`.** `ApplyFillerCuts` becomes a wrapper around a new general
-`ReplaceOriginCuts(SegmentOrigin origin, IEnumerable<PlannedCut> cuts)`, and `DissolveFillerCore`
-becomes `DissolveOriginCore(origin)`. The public signature of `ApplyFillerCuts` and its tests are
-unchanged. `ReplaceAutoSegments` already preserves every non-`auto` segment, so:
+`ReplaceOriginCuts(SegmentOrigin origin, IEnumerable<PlannedCut> cuts)`. The public signature of
+`ApplyFillerCuts` and its tests are unchanged. As built, a re-run does **not** dissolve the previous
+cuts of an origin the same way for every origin: for `Gameplay`, the previous cuts are *withdrawn*.
+Each becomes a kept `Auto` segment (keeping its id) and joins only immediately adjacent segments that
+are also kept and `Auto`, so withdrawing never changes a disabled, manual, filler or Claude neighbour
+and the footage a stale cut covered is never left cut. Filler cuts still dissolve into their neighbours,
+but never merge two kept neighbours of different origins into one (that would spread a neighbour's
+`Manual` origin over the other's footage). (`DissolveFillerCore` therefore does not become a general
+`DissolveOriginCore`; see `ReplaceOriginCuts` in `src/Cutback.Core/SegmentList.cs`.) `ReplaceAutoSegments` already preserves every non-`auto` segment, so:
 - silence re-detection keeps gameplay cuts;
 - gameplay re-detection keeps silence and filler cuts;
 - both keep manual edits.
@@ -522,9 +560,10 @@ games while recordings are H.264.
 ## Known limits accepted
 
 - Live capture records exactly what is on screen, at window resolution. Clean HUD-free and 4K footage
-  is the game's choice (`IsRecording`) or offline mode.
+  is the game's choice (`IsRecording`) or offline mode. 4K offline capture via `--record-scale` is
+  display-limited (see §1.1), and any window resize ends a recording (§1.3).
 - Live audio runs on the device clock and video on the monotonic clock. Drift is far below a frame
-  over minutes; it is logged at Stop, not corrected.
+  over minutes; as built it is not corrected (the audio length is fixed to the video's at Stop).
 - Mouse motion counts as input, so a player looking around is never "idle". That is intended.
 - An encoder slower than real time costs smoothness (duplicated frames), never sync or length.
 - Every phase requires ffmpeg to be installed, with the same clear message everywhere when it is not.
