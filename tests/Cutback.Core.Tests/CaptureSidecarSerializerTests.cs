@@ -50,6 +50,8 @@ public sealed class CaptureSidecarSerializerTests
     [InlineData("""{ "format": "mainframe-capture", "version": 1, "mode": "live", "durationSeconds": 0 }""")]
     [InlineData("""{ "format": "mainframe-capture", "version": 1, "mode": "live", "durationSeconds": 5, "input": [ { "start": 3, "end": 2 } ] }""")]
     [InlineData("""{ "format": "mainframe-capture", "version": 1, "mode": "live", "durationSeconds": 5, "markers": [ { "time": -1, "label": "x" } ] }""")]
+    [InlineData("""{ "format": "mainframe-capture", "version": 1, "mode": "live", "durationSeconds": 5, "input": [ null ] }""")]
+    [InlineData("""{ "format": "mainframe-capture", "version": 1, "mode": "live", "durationSeconds": 5, "markers": [ null ] }""")]
     public void Malformed_sidecars_are_rejected_with_a_readable_message(string json)
     {
         var act = () => CaptureSidecarSerializer.Deserialize(json);

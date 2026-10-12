@@ -68,7 +68,8 @@ public static class CaptureSidecarSerializer
 
     /// <summary>The sidecar next to <paramref name="videoPath"/>, or null when there is none.</summary>
     /// <exception cref="CaptureSidecarFormatException">A sidecar exists but cannot be read.</exception>
-    /// <exception cref="IOException">The file exists but could not be opened.</exception>
+    /// <exception cref="IOException">The file exists but could not be opened or read.</exception>
+    /// <exception cref="UnauthorizedAccessException">The file exists but the caller may not read it.</exception>
     public static async Task<CaptureSidecar?> TryLoadForVideoAsync(string videoPath, CancellationToken ct)
     {
         var path = CaptureSidecar.PathFor(videoPath);
@@ -86,7 +87,7 @@ public static class CaptureSidecarSerializer
         var result = new List<CaptureSpan>(spans?.Count ?? 0);
         foreach (var s in spans ?? [])
         {
-            if (s.Start is not { } start || s.End is not { } end
+            if (s is null || s.Start is not { } start || s.End is not { } end
                 || !double.IsFinite(start) || !double.IsFinite(end) || start < 0 || end <= start)
             {
                 throw new CaptureSidecarFormatException($"The Mainframe recording data has an invalid \"{name}\" span.");
@@ -103,7 +104,7 @@ public static class CaptureSidecarSerializer
         var result = new List<CaptureMarker>(markers?.Count ?? 0);
         foreach (var m in markers ?? [])
         {
-            if (m.Time is not { } time || !double.IsFinite(time) || time < 0)
+            if (m is null || m.Time is not { } time || !double.IsFinite(time) || time < 0)
             {
                 throw new CaptureSidecarFormatException("The Mainframe recording data has an invalid marker.");
             }
