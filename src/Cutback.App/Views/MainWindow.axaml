@@ -72,6 +72,7 @@
         <Separator />
         <MenuItem Header="_Transcribe" Command="{Binding TranscribeCommand}" />
         <MenuItem Header="Remove _Filler Words" Command="{Binding RemoveFillerWordsCommand}" />
+        <MenuItem Header="Detect Idle _Gameplay" Command="{Binding DetectIdleGameplayCommand}" IsVisible="{Binding HasCapture}" />
         <Separator />
         <MenuItem Header="_Detection Settings…" Command="{Binding ShowDetectionSettingsCommand}" />
       </MenuItem>
@@ -89,6 +90,10 @@
           </Button>
           <Button Classes="icon" Command="{Binding RemoveFillerWordsCommand}" ToolTip.Tip="Remove filler words">
             <Path Data="{StaticResource IconMessageSquareX}" />
+          </Button>
+          <Button Classes="icon" Command="{Binding DetectIdleGameplayCommand}" IsVisible="{Binding HasCapture}"
+                  ToolTip.Tip="Detect idle gameplay">
+            <Path Data="{StaticResource IconGamepad2}" />
           </Button>
           <ToggleButton Classes="icon" IsChecked="{Binding IsTranscriptOpen}" ToolTip.Tip="Transcript">
             <Path Data="{StaticResource IconCaptions}" />
