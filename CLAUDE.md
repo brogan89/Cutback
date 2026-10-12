@@ -251,7 +251,10 @@ video's own timeline. `CaptureSidecarSerializer.TryLoadForVideoAsync` reads it w
 opens; a bad or newer sidecar is a warning, never a failed open. **Detect idle gameplay** runs
 `GameplayCutPlanner` → `ReplaceOriginCuts(Gameplay)`, one undo step. Idle detection applies to
 `live` recordings only (offline renders have no input); loading, pause and Skip are cut exactly,
-Keep beats Skip, and markers protect ±`MarkerWindowMs` from idle cuts. Settings live in
+Keep beats Skip and is never cut, even by min-keep bridging (it is subtracted again after
+merging), and markers protect ±`MarkerWindowMs` from idle cuts. A gameplay re-run withdraws its
+previous cuts back to kept `auto` footage (merging only with kept `auto` neighbours) before
+carving the new ones. Settings live in
 `AppSettings` as `Gameplay*` and in File → Preferences → Gameplay detection. The fixture
 `tests/Cutback.Core.Tests/Fixtures/sample.mfcap.json` is byte-identical to the engine's copy; do
 not edit one without the other.
@@ -419,7 +422,7 @@ The project is therefore **GPL-3.0** and every dependency must be compatible: Av
 **Exception: `Cutback.Core` and `Cutback.Media` are MIT** (each has its own `LICENSE` and
 `PackageLicenseExpression`), packed as NuGet packages on every release, so Mainframe Engine's
 MIT editor can use them. Neither may take a dependency that is not MIT-compatible. Cutback runs
-the user's ffmpeg and does not bundle one.
+the user's ffmpeg and does not bundle or link ffmpeg.
 
 Ship a `THIRD-PARTY-NOTICES.md` and keep it current.
 

@@ -442,6 +442,7 @@ public sealed class ProjectSerializerTests
         var project = CutbackProject.CreateNew(source);
         var v2 = ProjectSerializer.Serialize(project).Replace("\"version\": 3", "\"version\": 2", StringComparison.Ordinal);
 
+        v2.Should().Contain("\"version\": 2");
         var back = ProjectSerializer.Deserialize(v2);
 
         back.Segments.Should().ContainSingle();

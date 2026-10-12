@@ -218,5 +218,6 @@ See [CLAUDE.md](CLAUDE.md) for the architecture, data model, and design constrai
 ## Licence
 
 Cutback is licensed under the [GNU General Public License v3.0](LICENSE). Precise export links
-libx264, which is GPL, so the application as a whole is GPL. Third-party licences are listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+libx264, which is GPL, so the application as a whole is GPL. `Cutback.Core` and `Cutback.Media`
+are MIT-licensed (each has its own `LICENSE`); the application remains GPL-3.0. Third-party
+licences are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
