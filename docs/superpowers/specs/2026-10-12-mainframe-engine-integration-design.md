@@ -70,7 +70,7 @@ records the rejected options: linking libav*, bundling ffmpeg in games, and a na
 
 | Flag | Meaning |
 |---|---|
-| `--record <file.mp4>` | Record from the **first update** (as built: this keeps the gap between creating and showing the window out of the video, and the start scene's loading is recorded as `loading` spans) until quit or `Recorder.Stop()`. Implies frame capture. |
+| `--record <file.mp4>` | Record from the **first update** (as built: this keeps the gap between creating and showing the window out of the video, and the start scene's loading is recorded as `loading` spans) until quit or `Recorder.Stop()`. Implies frame capture. Rejected with `--headless` at argument parsing (exit code 2): `HeadlessHost` has no renderer to record. |
 | `--record-scale <n>` | Sets `EngineOptions.ContentScale` (e.g. a 1920×1080-point window at 2 is 3840×2160 px). Intended for offline mode. **Display-limited:** the engine refuses to start when the display cannot hold the scaled window, so a 1920×1080-point window at scale 2 fails on a smaller display. `ContentScale` does *not* give 4K on any display; offline 4K capture depends on the machine. |
 | `--ffmpeg <path>` | ffmpeg to use (the editor passes its preference). |
 
@@ -79,7 +79,8 @@ frames only, and the recorder also records loading, so an offline video is longe
 (the Forest smoke run at `--max-frames 3600` wrote 7.3 s of loading plus exactly 60 s).
 
 **Exit code.** An offline `--record` run (a capture script or CI job, whose whole purpose is the file)
-whose recording ends with an error exits non-zero. A live run logs the error and keeps playing.
+whose recording ends with an error, or whose finalising does not finish within the two minutes shutdown waits,
+exits non-zero. A live run logs the error and keeps playing.
 
 **API** (`SceneTree.Recorder`, a `GameRecorder`; null under `--headless`):
 
@@ -89,9 +90,9 @@ public sealed class GameRecorder
     public bool IsRecording { get; }
     public TimeSpan Elapsed { get; }                      // recording clock
     public event Action? Started;
-    public event Action<RecordingResult>? Stopped;        // path, duration, dropped frames, error
+    public event Action<RecordingResult>? Stopped;        // path, duration, dropped + duplicated frames, error
 
-    public void Start(RecordingOptions options);          // path, fps (default 60), ffmpeg path
+    public void Start(RecordingOptions options);          // path, fps (default 60); offline always uses --fixed-fps
     public void Stop();                                    // async finalise; Stopped fires when the mux is done
 
     public void Mark(string label);                        // point of interest
@@ -101,13 +102,23 @@ public sealed class GameRecorder
 ```
 
 `Mark`, `Keep` and `Skip` are cheap no-ops when not recording, so games can call them unconditionally.
+As built, `RecordingOptions` (`required Path`, `Fps = 60`) and `RecordingResult` (`required Path`, `DurationSeconds`,
+`DroppedFrames`, `DuplicatedFrames`, `Error`) are `sealed record`s with `init` properties, not positional records, so
+they can grow without breaking callers. The ffmpeg path is not an option: it is the host's `--ffmpeg`. An offline
+recording always runs at the host's `--fixed-fps` (one update is one output frame); a `Fps` that differs is ignored
+with a warning.
 
 ### 1.2 Clock
 
 One clock gives every stream one timeline (as built: `GameRecorder.Now()` over the main-thread
 `CaptureTimeline`, not a separate `RecordingClock` type):
 
-- **Live:** seconds of a monotonic `Stopwatch` since `Start`.
+- **Live:** seconds of the monotonic `Stopwatch` clock from an **origin anchored at the first captured frame**
+  (as built): half an output slot before it (`first − 0.5/fps`), never before `Start`. Frames that arrive at the
+  output rate with a few ms of jitter then land mid-slot and are written exactly once; anchored on `Start`, a first
+  frame near a slot boundary made jittered frames repeat or skip (154 and 152 of 600 in the engine's test). Video
+  stamps, the audio lead and timeline events share the origin; anything before it is at 0, so a synchronous start
+  load, which runs before the first frame, is not in the video.
 - **Offline:** `frameIndex / fps`, exactly. Game time already advances by `1/fps` per update under
   `FixedDeltaTime`, so the two agree.
 
@@ -146,10 +157,18 @@ written, so the output is constant frame rate:
   is harmless because game time does not move.
 - **Live, writer queue full** (encoder slower than real time): drop the frame and count it. The next
   frame written gets the missing copies, so length and sync hold and only smoothness suffers. The
-  count goes in the sidecar (`droppedFrames`) and in `RecordingResult`.
+  count goes in the sidecar (`droppedFrames`) and in `RecordingResult`. As built, output frames written more than once
+  (slow frames and make-up copies) are counted too: logged with their percentage at `Stop` and returned as
+  `RecordingResult.DuplicatedFrames` (not in the sidecar).
 
 **Odd dimensions.** yuv420p needs even sizes, so an odd width or height is cropped by one pixel in
 the encoder (`crop=<w&~1>:<h&~1>`). The sidecar reports the swapchain's size.
+
+**Colour (as built).** ffmpeg's implicit `bgra` → `yuv420p` conversion is BT.601 and untagged, while players assume
+BT.709 for HD. The encoder's filter chain (after the crop, when there is one) is
+`scale=out_color_matrix=bt709:out_range=tv,setparams=color_primaries=bt709:color_trc=bt709`, and the output is tagged
+`-colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv` (`setparams` because the filter graph's
+frame properties override the output options for primaries and transfer). The tags survive the mux.
 
 **Window size.** If the swapchain extent changes during a recording (resize, fullscreen toggle),
 the recording stops cleanly with the reason "window size changed". Everything up to that point is
@@ -173,8 +192,9 @@ The main thread drains the ring (each update and at Stop) into a temp WAV with t
 (the existing `WavWriter` needs the whole buffer up front; the streaming writer writes a float WAV
 header with zero sizes and patches it at the end):
 
-- The first block's timestamp is compared with `t0`, and the gap is written as silence, so audio starts
-  on the same instant as frame 0 to within a device period.
+- The first block's timestamp is compared with the clock's origin (§1.2): a later block is led by silence, an
+  earlier one loses the samples mixed before the origin, so audio starts on the same instant as frame 0 to within a
+  device period. Nothing is drained until the first frame sets the origin.
 - Overflow is whole blocks: the recorder writes that many samples of silence, so the length still matches.
 - **The WAV is padded or truncated to the video's exact sample count at Stop, in both modes**, so the
   video and audio lengths always match.
@@ -214,19 +234,25 @@ starts a process.
 (`-g <fps>`), so Cutback's Fast export never moves a cut more than a second.
 
 **Files.** While recording:
-- video goes to `<out>.partial/video.mkv` (MKV, so a crash leaves a playable file);
+- video goes to `<out>.partial/video.ts` (as built, MPEG-TS rather than the MKV first planned: it needs no trailer,
+  so a crash still leaves a playable file, and its 90 kHz timestamps hold 1/60 s exactly, where MKV's millisecond
+  timestamps made the final MP4 60.03 fps);
 - audio goes to `<out>.partial/audio.wav`.
 
 As built, finalising runs on a thread-pool task: `Stop` returns at once and `Stopped` is raised on the
 main thread by the next update. A recording that captured **zero frames is abandoned** (no mux, no
-sidecar, because Cutback rejects `durationSeconds` 0).
+sidecar, because Cutback rejects `durationSeconds` 0); its `.partial/` is deleted too.
 
-`Stop` runs `ffmpeg -i video.mkv -i audio.wav -c:v copy -c:a aac -b:a 192k -movflags +faststart <out>`,
+`Stop` runs `ffmpeg -i video.ts -i audio.wav -c:v copy -c:a aac -b:a 192k -movflags +faststart <out>`,
 writes the sidecar, then deletes `.partial/`. On failure `.partial/` is kept and `RecordingResult.Error`
 says where it is.
 
-Progress and health come from `-progress pipe:1`, parsed the same way as in Cutback. If the encoder
-process exits early, the recording stops with its stderr tail as the error.
+As built, the encoder is passed `-progress pipe:1` but its output is only drained, not parsed: health comes from
+failed pipe writes and the encoder's exit code. If the encoder process exits early, the recording stops with its
+stderr tail as the error.
+
+The WAV header's sizes are unsigned 32-bit; past 4 GiB of data (about 3.1 hours) both are written as `0xFFFFFFFF`,
+which ffmpeg reads to the end of the file.
 
 ### 1.6 Events
 
@@ -240,7 +266,8 @@ process exits early, the recording stops with its stderr tail as the error.
 Which events count as input:
 - a key or button down;
 - a mouse button;
-- mouse motion over 2 px;
+- mouse motion over 2 px (as built, summed across events and forgotten after 100 ms without motion, so a slow
+  mouse-look of 1 px moves counts and a lone twitch does not);
 - a gamepad axis whose magnitude exceeds 0.25 (the recorder's own threshold, independent of
   `InputAction.Deadzone`);
 - as built, also: `InputEventAction` (held by action name), `InputEventText`, the mouse wheel, and any
@@ -289,7 +316,8 @@ video's timeline.
 ```
 
 Rules:
-- Every span list is sorted and non-overlapping within itself. Lists may overlap each other.
+- Every list is sorted by start (markers by time). `input`, `loading` and `paused` spans never overlap within
+  their list; `keep` and `skip` spans may (scopes can nest or interleave). Lists may overlap each other.
 - Unknown fields are ignored. A higher `version` is a new contract, and readers refuse it with a
   clear message.
 - The engine owns the format. The canonical example lives in the engine at
