@@ -166,22 +166,26 @@ Operations on `SegmentList` (`Split`, `MoveBoundary`, `Toggle`, `MergeAdjacentSa
 this. Assert it at the end of every mutating operation in Debug. Unit tests cover it.
 
 `origin` is `auto | manual | claude | filler | gameplay` and exists so the UI can show why a cut was made and
-so a re-analysis can replace its own cuts without touching anyone else's. When a dissolve merges two
-neighbours, `MergeOrigin` picks the stronger origin: Manual > Claude > Filler > Gameplay > Auto (so
-Detect silence cannot delete a gameplay cut that merged with an auto one). **Re-running detection
+so a re-analysis can replace its own cuts without touching anyone else's. **Re-running detection
 must never discard manual edits.** What counts as a manual edit: **`Toggle` marks the segment
 manual; `MoveBoundary` marks only disabled neighbours manual; `Split` marks nothing** (it inherits
 origin); **`SetRange` (drag to draw a section, or click / drag in the transcript) marks the new
 section manual; `Dissolve` (delete a region) marks nothing** — the region ceases to exist and its
-neighbours grow over it, keeping their own origins. A split is not a decision about either half,
+neighbours grow over it, keeping their own origins (where both neighbours share a state and merge
+into one segment, `MergeOrigin` keeps the stronger origin: Manual > Claude > Filler > Gameplay >
+Auto, so Detect silence cannot delete a gameplay cut that merged with an auto one). A split is not a decision about either half,
 and locking kept regions would stop re-detection from finding new silences inside them.
 `ReplaceAutoSegments` (silence) preserves every non-`auto` segment exactly and clips new cuts
 around them. `ApplyFillerCuts` (filler words) dissolves the previous `filler` segments and carves
 the new cuts into whatever is there; `FillerCutPlanner` drops any candidate that touches a
 `manual` segment, so the two detectors leave each other's and the user's cuts alone.
-`ReplaceOriginCuts(Gameplay)` (Detect idle gameplay) works the same way as filler cuts, but `GameplayCutPlanner` *clips* manual segments out of its cuts instead of dropping the cut, because gameplay cuts are long.
+`ReplaceOriginCuts(Gameplay)` (Detect idle gameplay) works the same way as filler cuts, but
+`GameplayCutPlanner` *clips* manual segments out of its cuts instead of dropping the cut, because
+gameplay cuts are long.
 
-Schema version 2 added the `filler` origin and version 3 the `gameplay` origin. Both migrations are no-ops; the bumps exist so an older build refuses the file with its "newer version" message instead of a deserialisation error.
+Schema version 2 added the `filler` origin and version 3 the `gameplay` origin. Both migrations
+are no-ops; the bumps exist so an older build refuses the file with its "newer version" message
+instead of a deserialisation error.
 
 `sha256` is used to warn the user when the source file has changed or moved. It does not block opening.
 
@@ -385,9 +389,8 @@ These will cost you hours if you don't know them:
 Unit tests cover `Cutback.Core` (the partition invariant including `SetRange`, `Dissolve` and `Restore`,
 `EditHistory`, detection planning, project round-trip serialisation, version migration, source hashing,
 filler detection and planning, capture sidecar reading, gameplay cut planning, `ReplaceOriginCuts`,
-transcript cut-state, output timeline, transcript exporters) and the
-ffmpeg-independent parts of `Cutback.Media`
-(`FfmpegLocator` resolution order, `PeakReducer`, waveform levels and snapping, the silencedetect and
+transcript cut-state, output timeline, transcript exporters) and the ffmpeg-independent parts of
+`Cutback.Media` (`FfmpegLocator` resolution order, `PeakReducer`, waveform levels and snapping, the silencedetect and
 `-progress` parsers, `FfmpegCapabilities` version parsing, `KeyframeSnapper`, and `FilterGraphBuilder`
 output asserted against expected filter strings), and `WordAssembler`, model metadata and cache layout
 in `Cutback.Analysis.Tests`. **Never shell out to ffmpeg in tests.** Do not attempt
@@ -408,14 +411,15 @@ dotnet format
 ## Licensing
 
 Precise export mode links **libx264, which is GPL**. That makes the distributed ffmpeg build GPL, which
-makes this application GPL. The project is therefore **GPL-3.0** and every dependency must be
-compatible: Avalonia (MIT), FFMpegCore (MIT), CommunityToolkit.Mvvm (MIT), SkiaSharp (MIT), LibVLCSharp
+makes this application GPL. (Releases currently run the user's ffmpeg rather than bundling one;
+whether the application itself must stay GPL is open question 1 in the Mainframe integration spec.)
+The project is therefore **GPL-3.0** and every dependency must be compatible: Avalonia (MIT), FFMpegCore (MIT), CommunityToolkit.Mvvm (MIT), SkiaSharp (MIT), LibVLCSharp
 (LGPL-2.1+) all are. Before adding any new dependency, check the licence.
 
 **Exception: `Cutback.Core` and `Cutback.Media` are MIT** (each has its own `LICENSE` and
 `PackageLicenseExpression`), packed as NuGet packages on every release, so Mainframe Engine's
-MIT editor can use them. Neither may take a dependency that is not MIT-compatible. Cutback
-never bundles or links ffmpeg; it runs the user's.
+MIT editor can use them. Neither may take a dependency that is not MIT-compatible. Cutback runs
+the user's ffmpeg and does not bundle one.
 
 Ship a `THIRD-PARTY-NOTICES.md` and keep it current.
 
