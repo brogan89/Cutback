@@ -7,6 +7,7 @@ using Cutback.App.Controls;
 using Cutback.App.Playback;
 using Cutback.App.Services;
 using Cutback.Core;
+using Cutback.Core.Capture;
 using Cutback.Core.Detection;
 using Cutback.Core.Models;
 using Cutback.Core.Projects;
@@ -63,7 +64,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasProject), nameof(Title), nameof(SourceFileName), nameof(ProjectName))]
-    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand), nameof(ExportTranscriptCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PlayPauseCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand), nameof(ExportTranscriptCommand), nameof(DetectIdleGameplayCommand))]
     public partial CutbackProject? Project { get; private set; }
 
     /// <summary>Where the project was last saved or loaded from. Null for an unsaved project.</summary>
@@ -83,6 +84,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     public partial Waveform? Waveform { get; private set; }
+
+    /// <summary>The Mainframe Engine sidecar next to the source video, or null for any other video.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCapture))]
+    [NotifyCanExecuteChangedFor(nameof(DetectIdleGameplayCommand))]
+    public partial CaptureSidecar? Capture { get; private set; }
+
+    public bool HasCapture => Capture is not null;
 
     public bool HasProject => Project is not null;
 
@@ -246,7 +255,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     // ---- busy ---------------------------------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand), nameof(ExportTranscriptCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenVideoCommand), nameof(OpenProjectCommand), nameof(DetectSilenceCommand), nameof(SaveProjectCommand), nameof(SaveProjectAsCommand), nameof(NewProjectCommand), nameof(ExportCommand), nameof(UndoCommand), nameof(RedoCommand), nameof(TranscribeCommand), nameof(RemoveFillerWordsCommand), nameof(ExportTranscriptCommand), nameof(DetectIdleGameplayCommand))]
     public partial bool IsBusy { get; private set; }
 
     [ObservableProperty]
@@ -270,6 +279,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private bool NotBusy => !IsBusy;
 
     private bool CanEdit => HasProject && !IsBusy;
+
+    private bool CanDetectGameplay => CanEdit && Capture is not null;
 
     // ---- opening ------------------------------------------------------------------------------
 
@@ -388,6 +399,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         try
         {
             var (project, path, warning) = await load(ct);
+            var (capture, captureWarning) = await LoadCaptureAsync(project.Source.Path, ct);
             var ffmpeg = ResolveFfmpeg();
 
             BusyMessage = "Reading waveform…";
@@ -409,8 +421,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             DurationSeconds = project.Source.DurationSeconds;
             PositionSeconds = 0;
             IsDirty = false;
-            StatusMessage = null;
-            WarningMessage = warning;
+            Capture = capture;
+            StatusMessage = capture is null
+                ? null
+                : $"Mainframe recording · {capture.Markers.Count} marker{(capture.Markers.Count == 1 ? "" : "s")}";
+            WarningMessage = JoinWarnings(warning, captureWarning);
 
             if (path is not null)
             {
@@ -433,6 +448,25 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>The recording sidecar, or a warning when one exists but cannot be used. The video opens either way.</summary>
+    private static async Task<(CaptureSidecar? Capture, string? Warning)> LoadCaptureAsync(string videoPath, CancellationToken ct)
+    {
+        try
+        {
+            return (await CaptureSidecarSerializer.TryLoadForVideoAsync(videoPath, ct), null);
+        }
+        catch (Exception ex) when (ex is CaptureSidecarFormatException or IOException or UnauthorizedAccessException)
+        {
+            return (null, ex.Message + " Detect idle gameplay is unavailable for this video.");
+        }
+    }
+
+    private static string? JoinWarnings(params string?[] warnings)
+    {
+        var present = warnings.Where(w => !string.IsNullOrEmpty(w)).ToArray();
+        return present.Length == 0 ? null : string.Join(" ", present);
+    }
+
     // ---- new / save ---------------------------------------------------------------------------
 
     [RelayCommand(CanExecute = nameof(CanEdit))]
@@ -450,6 +484,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _dragSnapshot = null;
         Segments = null;
         Waveform = null;
+        Capture = null;
         Transcript = [];
         IsTranscriptStale = false;
         CurrentWordIndex = -1;
@@ -936,6 +971,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         return SnapWordSpan(word.Start, word.End);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanDetectGameplay))]
+    private void DetectIdleGameplay()
+    {
+        if (Project is null || Segments is null || Capture is null)
+        {
+            return;
+        }
+
+        ErrorMessage = null;
+        var cuts = GameplayCutPlanner.Plan(Capture, Segments.Segments, _settings.Current.Gameplay, DurationSeconds);
+        Edit(s => s.ReplaceOriginCuts(SegmentOrigin.Gameplay, cuts));
+
+        var removed = cuts.Sum(c => c.Duration);
+        StatusMessage = cuts.Count == 0
+            ? "No idle gameplay found with the current settings."
+            : $"Cut {cuts.Count} stretch{(cuts.Count == 1 ? "" : "es")} of idle gameplay, {TimeFormat.Clock(removed)} removed.";
     }
 
     /// <summary>Snaps both edges of a word to the quietest nearby waveform bucket, falling back to the raw edges if snapping would collapse the word.</summary>

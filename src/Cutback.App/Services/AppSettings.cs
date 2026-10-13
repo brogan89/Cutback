@@ -26,6 +26,16 @@ public sealed record AppSettings
     public const int MinMinKeepMs = 0;
     public const int MaxMinKeepMs = 2000;
 
+    // Bounds for the gameplay detection fields. The Preferences NumericUpDowns mirror them.
+    public const int MinGameplayMinIdleMs = 500;
+    public const int MaxGameplayMinIdleMs = 60_000;
+    public const int MinGameplayPaddingMs = 0;
+    public const int MaxGameplayPaddingMs = 2000;
+    public const int MinGameplayMinKeepMs = 0;
+    public const int MaxGameplayMinKeepMs = 10_000;
+    public const int MinGameplayMarkerWindowMs = 0;
+    public const int MaxGameplayMarkerWindowMs = 10_000;
+
     /// <summary>How many edits can be undone. Each step is an array of references to immutable segments, so this is cheap.</summary>
     public int UndoHistoryLimit { get; set; } = DefaultUndoHistoryLimit;
 
@@ -60,6 +70,24 @@ public sealed record AppSettings
     /// <summary>The four detection values as the record the planners take. Derived, not persisted.</summary>
     [JsonIgnore]
     public DetectionSettings Detection => new(PaddingMs, MinSilenceMs, SilenceThresholdDb, MinKeepMs);
+
+    // Gameplay detection (Mainframe Engine recordings). Flat for the same reason as silence detection.
+
+    /// <summary>See <see cref="GameplaySettings.MinIdleMs"/>.</summary>
+    public int GameplayMinIdleMs { get; set; } = GameplaySettings.Default.MinIdleMs;
+
+    /// <summary>See <see cref="GameplaySettings.PaddingMs"/>.</summary>
+    public int GameplayPaddingMs { get; set; } = GameplaySettings.Default.PaddingMs;
+
+    /// <summary>See <see cref="GameplaySettings.MinKeepMs"/>.</summary>
+    public int GameplayMinKeepMs { get; set; } = GameplaySettings.Default.MinKeepMs;
+
+    /// <summary>See <see cref="GameplaySettings.MarkerWindowMs"/>.</summary>
+    public int GameplayMarkerWindowMs { get; set; } = GameplaySettings.Default.MarkerWindowMs;
+
+    /// <summary>The four gameplay values as the record the planner takes. Derived, not persisted.</summary>
+    [JsonIgnore]
+    public GameplaySettings Gameplay => new(GameplayMinIdleMs, GameplayPaddingMs, GameplayMinKeepMs, GameplayMarkerWindowMs);
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, WriteIndented = true)]

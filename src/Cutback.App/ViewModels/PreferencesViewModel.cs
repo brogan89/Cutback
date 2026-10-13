@@ -16,7 +16,8 @@ public sealed partial class PreferencesViewModel : ViewModelBase
     /// <summary>Tab indices, matching the order of the TabItems in PreferencesWindow.axaml.</summary>
     public const int GeneralTab = 0;
     public const int DetectionTab = 1;
-    public const int TranscriptionTab = 2;
+    public const int GameplayTab = 2;
+    public const int TranscriptionTab = 3;
 
     private readonly AppSettingsStore _settings;
 
@@ -30,6 +31,10 @@ public sealed partial class PreferencesViewModel : ViewModelBase
         MinSilenceMs = settings.Current.MinSilenceMs;
         PaddingMs = settings.Current.PaddingMs;
         MinKeepMs = settings.Current.MinKeepMs;
+        GameplayMinIdleMs = settings.Current.GameplayMinIdleMs;
+        GameplayPaddingMs = settings.Current.GameplayPaddingMs;
+        GameplayMinKeepMs = settings.Current.GameplayMinKeepMs;
+        GameplayMarkerWindowMs = settings.Current.GameplayMarkerWindowMs;
 
         SpeechModels = WhisperModelInfo.All
             .Select(i => new SpeechModelOption(i.Model, i.DisplayName + (models.IsDownloaded(i.Model) ? ", downloaded" : "")))
@@ -75,6 +80,31 @@ public sealed partial class PreferencesViewModel : ViewModelBase
         MinKeepMs = d.MinKeepMs;
     }
 
+    // Gameplay detection. Bounds live on AppSettings and are mirrored by the NumericUpDowns.
+
+    [ObservableProperty]
+    public partial int GameplayMinIdleMs { get; set; }
+
+    [ObservableProperty]
+    public partial int GameplayPaddingMs { get; set; }
+
+    [ObservableProperty]
+    public partial int GameplayMinKeepMs { get; set; }
+
+    [ObservableProperty]
+    public partial int GameplayMarkerWindowMs { get; set; }
+
+    /// <summary>Puts the four gameplay fields back to <see cref="GameplaySettings.Default"/>. Nothing is saved until OK.</summary>
+    [RelayCommand]
+    private void ResetGameplay()
+    {
+        var g = GameplaySettings.Default;
+        GameplayMinIdleMs = g.MinIdleMs;
+        GameplayPaddingMs = g.PaddingMs;
+        GameplayMinKeepMs = g.MinKeepMs;
+        GameplayMarkerWindowMs = g.MarkerWindowMs;
+    }
+
     public IReadOnlyList<SpeechModelOption> SpeechModels { get; }
 
     [ObservableProperty]
@@ -109,6 +139,10 @@ public sealed partial class PreferencesViewModel : ViewModelBase
             MinSilenceMs = Math.Clamp(MinSilenceMs, AppSettings.MinMinSilenceMs, AppSettings.MaxMinSilenceMs),
             PaddingMs = Math.Clamp(PaddingMs, AppSettings.MinPaddingMs, AppSettings.MaxPaddingMs),
             MinKeepMs = Math.Clamp(MinKeepMs, AppSettings.MinMinKeepMs, AppSettings.MaxMinKeepMs),
+            GameplayMinIdleMs = Math.Clamp(GameplayMinIdleMs, AppSettings.MinGameplayMinIdleMs, AppSettings.MaxGameplayMinIdleMs),
+            GameplayPaddingMs = Math.Clamp(GameplayPaddingMs, AppSettings.MinGameplayPaddingMs, AppSettings.MaxGameplayPaddingMs),
+            GameplayMinKeepMs = Math.Clamp(GameplayMinKeepMs, AppSettings.MinGameplayMinKeepMs, AppSettings.MaxGameplayMinKeepMs),
+            GameplayMarkerWindowMs = Math.Clamp(GameplayMarkerWindowMs, AppSettings.MinGameplayMarkerWindowMs, AppSettings.MaxGameplayMarkerWindowMs),
         });
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }

@@ -185,6 +185,13 @@ branch.
    kept section starts at the previous keyframe, so it is approximate. The extension picks the
    container: `.mp4`, `.mov`, `.mkv`, `.webm`.
 
+### Mainframe Engine recordings
+
+Videos recorded with Mainframe Engine's `--record` come with a `.mfcap.json` file that says when the
+player was idle, when a loading screen or pause menu was up, and what the game marked. Open the video
+and click **Detect idle gameplay** (the gamepad button) to cut all of that in one step; markers
+appear in the timeline ruler. Tune it in Preferences → Gameplay detection.
+
 ## Project layout
 
 ```
@@ -211,5 +218,6 @@ See [CLAUDE.md](CLAUDE.md) for the architecture, data model, and design constrai
 ## Licence
 
 Cutback is licensed under the [GNU General Public License v3.0](LICENSE). Precise export links
-libx264, which is GPL, so the application as a whole is GPL. Third-party licences are listed in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+libx264, which is GPL, so the application as a whole is GPL. `Cutback.Core` and `Cutback.Media`
+are MIT-licensed (each has its own `LICENSE`); the application remains GPL-3.0. Third-party
+licences are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

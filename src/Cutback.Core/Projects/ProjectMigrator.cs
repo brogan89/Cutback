@@ -24,6 +24,9 @@ public sealed class ProjectMigrator
             // 1 -> 2: the "filler" segment origin was added. No field changes; the bump exists so
             // an older build refuses a file it cannot read with its "newer version" message.
             [1] = static _ => { },
+
+            // 2 -> 3: the "gameplay" segment origin was added. No field changes; same reason as 1 -> 2.
+            [2] = static _ => { },
         });
 
     /// <param name="targetVersion">The version documents are migrated up to.</param>

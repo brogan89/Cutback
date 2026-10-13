@@ -60,6 +60,7 @@
   <Color x:Key="TimelineLabel">#9A9AA6</Color>
   <Color x:Key="TimelineReasonText">#7C7C88</Color>
   <Color x:Key="TimelineHint">#60606A</Color>
+  <Color x:Key="TimelineMarker">#B48CFF</Color>
 
   <!-- Transcript (resolved by TranscriptControl) -->
   <SolidColorBrush x:Key="TranscriptKeptBrush" Color="{StaticResource TextPrimaryColor}" />

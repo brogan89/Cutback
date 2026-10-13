@@ -58,6 +58,10 @@ public sealed class AppSettingsStore
         MinSilenceMs = Math.Clamp(settings.MinSilenceMs, AppSettings.MinMinSilenceMs, AppSettings.MaxMinSilenceMs),
         PaddingMs = Math.Clamp(settings.PaddingMs, AppSettings.MinPaddingMs, AppSettings.MaxPaddingMs),
         MinKeepMs = Math.Clamp(settings.MinKeepMs, AppSettings.MinMinKeepMs, AppSettings.MaxMinKeepMs),
+        GameplayMinIdleMs = Math.Clamp(settings.GameplayMinIdleMs, AppSettings.MinGameplayMinIdleMs, AppSettings.MaxGameplayMinIdleMs),
+        GameplayPaddingMs = Math.Clamp(settings.GameplayPaddingMs, AppSettings.MinGameplayPaddingMs, AppSettings.MaxGameplayPaddingMs),
+        GameplayMinKeepMs = Math.Clamp(settings.GameplayMinKeepMs, AppSettings.MinGameplayMinKeepMs, AppSettings.MaxGameplayMinKeepMs),
+        GameplayMarkerWindowMs = Math.Clamp(settings.GameplayMarkerWindowMs, AppSettings.MinGameplayMarkerWindowMs, AppSettings.MaxGameplayMarkerWindowMs),
     };
 
     /// <summary>Normalised, de-duplicated filler words, or the defaults when nothing usable remains.</summary>

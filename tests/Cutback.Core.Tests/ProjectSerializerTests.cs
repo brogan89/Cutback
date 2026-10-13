@@ -368,12 +368,6 @@ public sealed class ProjectSerializerTests
     // ---- version 2: filler origin -------------------------------------------------------------
 
     [Fact]
-    public void Current_version_is_2()
-    {
-        ProjectSerializer.CurrentVersion.Should().Be(2);
-    }
-
-    [Fact]
     public void Filler_origin_round_trips_as_a_lower_case_string()
     {
         var segments = new[]
@@ -410,6 +404,47 @@ public sealed class ProjectSerializerTests
         var project = ProjectSerializer.Deserialize(v1);
 
         project.Segments.Should().ContainSingle().Which.Id.Should().Be("a");
-        JsonNode.Parse(ProjectSerializer.Serialize(project))!["version"]!.GetValue<int>().Should().Be(2);
+        JsonNode.Parse(ProjectSerializer.Serialize(project))!["version"]!.GetValue<int>().Should().Be(ProjectSerializer.CurrentVersion);
+    }
+
+    // ---- version 3: gameplay origin -----------------------------------------------------------
+
+    [Fact]
+    public void Current_version_is_3()
+    {
+        ProjectSerializer.CurrentVersion.Should().Be(3);
+    }
+
+    [Fact]
+    public void Gameplay_origin_round_trips_as_lower_case_string()
+    {
+        var source = new SourceInfo("/v.mp4", "abc", 10.0, 1920, 1080, 60.0);
+        var segments = new[]
+        {
+            Segment.Create(0.0, 4.0, enabled: true, SegmentOrigin.Auto),
+            Segment.Create(4.0, 7.5, enabled: false, SegmentOrigin.Gameplay, "idle 3.5s"),
+            Segment.Create(7.5, 10.0, enabled: true, SegmentOrigin.Auto),
+        };
+        var project = new CutbackProject(source, segments, [], DetectionSettings.Default);
+
+        var json = ProjectSerializer.Serialize(project);
+        var back = ProjectSerializer.Deserialize(json);
+
+        JsonNode.Parse(json)!["segments"]![1]!["origin"]!.GetValue<string>().Should().Be("gameplay");
+        back.Segments[1].Origin.Should().Be(SegmentOrigin.Gameplay);
+        back.Segments[1].Reason.Should().Be("idle 3.5s");
+    }
+
+    [Fact]
+    public void A_version_2_file_is_migrated_to_3()
+    {
+        var source = new SourceInfo("/v.mp4", "abc", 10.0, 1920, 1080, 60.0);
+        var project = CutbackProject.CreateNew(source);
+        var v2 = ProjectSerializer.Serialize(project).Replace("\"version\": 3", "\"version\": 2", StringComparison.Ordinal);
+
+        v2.Should().Contain("\"version\": 2");
+        var back = ProjectSerializer.Deserialize(v2);
+
+        back.Segments.Should().ContainSingle();
     }
 }

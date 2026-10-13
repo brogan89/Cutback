@@ -40,7 +40,7 @@ Test-only packages are not distributed with the application.
 
 | Asset | Licence | Notes |
 |---|---|---|
-| Lucide icons (path data in `src/Cutback.App/Styles/Icons.axaml`: audio-lines, message-square-x, captions, upload, play, pause, film) | ISC, Copyright (c) 2026 Lucide Icons and Contributors. `upload` is derived from Feather: MIT, Copyright (c) 2013-present Cole Bemis | https://lucide.dev. No package dependency; the geometry is copied into the resource dictionary. |
+| Lucide icons (path data in `src/Cutback.App/Styles/Icons.axaml`: audio-lines, message-square-x, captions, upload, play, pause, film, gamepad-2) | ISC, Copyright (c) 2026 Lucide Icons and Contributors. `upload` is derived from Feather: MIT, Copyright (c) 2013-present Cole Bemis | https://lucide.dev. No package dependency; the geometry is copied into the resource dictionary. |
 
 ISC licence text (Lucide):
 

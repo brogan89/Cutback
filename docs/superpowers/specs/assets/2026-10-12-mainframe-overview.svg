@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 540" width="1000" height="540" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Cutback and Mainframe Engine: components by phase</title>
+  <style>
+    .bg { fill: #ffffff; }
+    .lane { fill: #f6f8fa; stroke: #d1d9e0; stroke-width: 1.5; }
+    .lanehead { font-size: 15px; font-weight: 600; fill: #1f2328; }
+    .box { fill: #ffffff; stroke: #818b98; stroke-width: 1.5; }
+    .later { stroke-dasharray: 6 4; }
+    .ext { fill: #ffebe9; stroke: #cf222e; stroke-width: 1.5; stroke-dasharray: 6 4; }
+    .file { fill: #fff8c5; stroke: #9a6700; stroke-width: 1.5; }
+    .t { font-size: 14px; font-weight: 600; fill: #1f2328; }
+    .s { font-size: 12px; fill: #59636e; }
+    .lbl { font-size: 11px; fill: #59636e; }
+    .line { stroke: #59636e; stroke-width: 1.5; fill: none; }
+    .dash { stroke-dasharray: 5 4; }
+    .ah { fill: #59636e; }
+    .p1 { fill: #0969da; } .p2 { fill: #1a7f37; } .p3 { fill: #8250df; } .p4 { fill: #bf3989; }
+    .bt { font-size: 12px; font-weight: 700; fill: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      .lane { fill: #151b23; stroke: #3d444d; }
+      .lanehead, .t { fill: #f0f6fc; }
+      .box { fill: #0d1117; stroke: #656c76; }
+      .ext { fill: #3a1418; stroke: #f85149; }
+      .file { fill: #2e2510; stroke: #d29922; }
+      .s, .lbl { fill: #9198a1; }
+      .line { stroke: #9198a1; } .ah { fill: #9198a1; }
+      .p1 { fill: #1f6feb; } .p2 { fill: #238636; } .p3 { fill: #8957e5; } .p4 { fill: #db61a2; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="ah"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1000" height="540"/>
+
+  <!-- Lanes -->
+  <rect class="lane" x="20" y="20" width="300" height="300" rx="10"/>
+  <text class="lanehead" x="170" y="48" text-anchor="middle">Game · MainframeEngine runtime</text>
+  <rect class="lane" x="350" y="20" width="300" height="300" rx="10"/>
+  <text class="lanehead" x="500" y="48" text-anchor="middle">Mainframe Editor</text>
+  <rect class="lane" x="680" y="20" width="300" height="300" rx="10"/>
+  <text class="lanehead" x="830" y="48" text-anchor="middle">Cutback (separate desktop app)</text>
+
+  <!-- Lane A: runtime -->
+  <rect class="box" x="40" y="80" width="260" height="56" rx="8"/>
+  <text class="t" x="170" y="104" text-anchor="middle">GameHost --record</text>
+  <text class="s" x="170" y="124" text-anchor="middle">live play, or --fixed-fps offline</text>
+  <circle class="p1" cx="292" cy="80" r="11"/><text class="bt" x="292" y="84" text-anchor="middle">1</text>
+
+  <rect class="box" x="40" y="160" width="260" height="56" rx="8"/>
+  <text class="t" x="170" y="184" text-anchor="middle">Recorder API (game code)</text>
+  <text class="s" x="170" y="204" text-anchor="middle">IsRecording · Mark · Keep · Skip</text>
+  <circle class="p1" cx="292" cy="160" r="11"/><text class="bt" x="292" y="164" text-anchor="middle">1</text>
+
+  <rect class="box" x="40" y="240" width="260" height="56" rx="8"/>
+  <text class="t" x="170" y="264" text-anchor="middle">GameRecorder</text>
+  <text class="s" x="170" y="284" text-anchor="middle">readback ring · mix tap · sidecar</text>
+  <circle class="p1" cx="292" cy="240" r="11"/><text class="bt" x="292" y="244" text-anchor="middle">1</text>
+
+  <!-- Lane B: editor -->
+  <rect class="box" x="370" y="80" width="260" height="56" rx="8"/>
+  <text class="t" x="500" y="104" text-anchor="middle">Record button</text>
+  <text class="s" x="500" y="124" text-anchor="middle">plays the game with --record</text>
+  <circle class="p3" cx="622" cy="80" r="11"/><text class="bt" x="622" y="84" text-anchor="middle">3</text>
+
+  <rect class="box" x="370" y="160" width="260" height="56" rx="8"/>
+  <text class="t" x="500" y="184" text-anchor="middle">Open in Cutback</text>
+  <text class="s" x="500" y="204" text-anchor="middle">launches the app on the recording</text>
+  <circle class="p3" cx="622" cy="160" r="11"/><text class="bt" x="622" y="164" text-anchor="middle">3</text>
+
+  <rect class="box later" x="370" y="240" width="260" height="56" rx="8"/>
+  <text class="t" x="500" y="264" text-anchor="middle">Clips tab (RmlUi IEditorTab)</text>
+  <text class="s" x="500" y="284" text-anchor="middle">trim + export inside the editor</text>
+  <circle class="p4" cx="622" cy="240" r="11"/><text class="bt" x="622" y="244" text-anchor="middle">4</text>
+
+  <!-- Lane C: Cutback -->
+  <rect class="box" x="700" y="80" width="260" height="56" rx="8"/>
+  <text class="t" x="830" y="104" text-anchor="middle">Detect idle gameplay</text>
+  <text class="s" x="830" y="124" text-anchor="middle">new segment origin: gameplay</text>
+  <circle class="p2" cx="952" cy="80" r="11"/><text class="bt" x="952" y="84" text-anchor="middle">2</text>
+
+  <rect class="box" x="700" y="160" width="260" height="56" rx="8"/>
+  <text class="t" x="830" y="184" text-anchor="middle">Markers on the timeline</text>
+  <text class="s" x="830" y="204" text-anchor="middle">read from the sidecar</text>
+  <circle class="p2" cx="952" cy="160" r="11"/><text class="bt" x="952" y="164" text-anchor="middle">2</text>
+
+  <rect class="box" x="700" y="240" width="260" height="56" rx="8"/>
+  <text class="t" x="830" y="264" text-anchor="middle">Cutback.Core · Cutback.Media</text>
+  <text class="s" x="830" y="284" text-anchor="middle">relicensed MIT, packed as NuGet</text>
+  <circle class="p2" cx="952" cy="240" r="11"/><text class="bt" x="952" y="244" text-anchor="middle">2</text>
+
+  <!-- Bottom row: ffmpeg and files -->
+  <rect class="ext" x="40" y="372" width="260" height="56" rx="8"/>
+  <text class="t" x="170" y="396" text-anchor="middle">ffmpeg (user-installed)</text>
+  <text class="s" x="170" y="416" text-anchor="middle">child process · never linked</text>
+
+  <path class="file" d="M360,372 h150 l20,20 v36 h-170 z"/>
+  <text class="t" x="445" y="405" text-anchor="middle">recording.mp4</text>
+
+  <path class="file" d="M560,372 h200 l20,20 v36 h-220 z"/>
+  <text class="t" x="670" y="405" text-anchor="middle">recording.mp4.mfcap.json</text>
+
+  <!-- Arrows -->
+  <line class="line" x1="170" y1="136" x2="170" y2="158" marker-end="url(#arrow)"/>
+  <line class="line" x1="170" y1="216" x2="170" y2="238" marker-end="url(#arrow)"/>
+  <line class="line" x1="170" y1="296" x2="170" y2="370" marker-end="url(#arrow)"/>
+  <text class="lbl" x="178" y="340">BGRA frames + f32 PCM</text>
+  <line class="line" x1="300" y1="400" x2="358" y2="400" marker-end="url(#arrow)"/>
+  <path class="line" d="M300,282 C 420,320 560,330 640,370" marker-end="url(#arrow)"/>
+  <text class="lbl" x="452" y="338">input · loading · pause · marks</text>
+
+  <line class="line" x1="370" y1="108" x2="302" y2="108" marker-end="url(#arrow)"/>
+  <text class="lbl" x="336" y="100" text-anchor="middle">launch</text>
+  <line class="line" x1="630" y1="188" x2="698" y2="188" marker-end="url(#arrow)"/>
+  <text class="lbl" x="664" y="180" text-anchor="middle">launch</text>
+  <line class="line dash" x1="700" y1="268" x2="632" y2="268" marker-end="url(#arrow)"/>
+  <text class="lbl" x="666" y="260" text-anchor="middle">P4</text>
+  <path class="line" d="M780,400 C 840,390 860,360 860,322" marker-end="url(#arrow)"/>
+  <text class="lbl" x="868" y="364">opened together</text>
+
+  <!-- Legend -->
+  <circle class="p1" cx="40" cy="478" r="9"/><text class="s" x="56" y="482">Phase 1 · engine recorder</text>
+  <circle class="p2" cx="250" cy="478" r="9"/><text class="s" x="266" y="482">Phase 2 · gameplay cuts in Cutback</text>
+  <circle class="p3" cx="510" cy="478" r="9"/><text class="s" x="526" y="482">Phase 3 · editor hooks</text>
+  <circle class="p4" cx="710" cy="478" r="9"/><text class="s" x="726" y="482">Phase 4 · Clips tab in the engine</text>
+  <rect class="ext" x="32" y="502" width="18" height="14" rx="3"/><text class="s" x="56" y="514">outside the engine, across a process boundary</text>
+  <rect class="box later" x="372" y="502" width="18" height="14" rx="3"/><text class="s" x="396" y="514">later phase</text>
+</svg>

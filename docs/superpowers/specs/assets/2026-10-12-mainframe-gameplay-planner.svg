@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 420" width="1000" height="420" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>GameplayCutPlanner worked example: one minute of recording</title>
+  <style>
+    .bg { fill: #ffffff; }
+    .rowl { font-size: 13px; font-weight: 600; fill: #1f2328; }
+    .rows { font-size: 11px; fill: #59636e; }
+    .tick { stroke: #d1d9e0; stroke-width: 1; }
+    .tl { font-size: 11px; fill: #59636e; }
+    .input { fill: #54aeff; }
+    .skip { fill: #ff8182; }
+    .keep { fill: #4ac26b; }
+    .mwin { fill: #4ac26b; opacity: 0.35; }
+    .mk { stroke: #8250df; stroke-width: 2.5; }
+    .mkt { font-size: 11px; fill: #8250df; font-weight: 600; }
+    .idle { fill: #d4a72c; }
+    .short { fill: none; stroke: #d4a72c; stroke-width: 1.5; stroke-dasharray: 3 2; }
+    .kept { fill: #1a7f37; }
+    .cut { fill: #afb8c1; }
+    .why { font-size: 11px; fill: #59636e; }
+    .in { font-size: 11px; fill: #ffffff; font-weight: 600; }
+    .lead { stroke: #8c959f; stroke-width: 1; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      .rowl { fill: #f0f6fc; } .rows, .tl, .why { fill: #9198a1; }
+      .tick { stroke: #3d444d; }
+      .input { fill: #1f6feb; } .skip { fill: #da3633; } .keep { fill: #2ea043; } .mwin { fill: #2ea043; }
+      .mk { stroke: #a371f7; } .mkt { fill: #a371f7; }
+      .idle { fill: #bb8009; } .short { stroke: #bb8009; }
+      .kept { fill: #238636; } .cut { fill: #3d444d; }
+      .lead { stroke: #656c76; }
+    }
+  </style>
+  <rect class="bg" x="0" y="0" width="1000" height="420"/>
+
+  <!-- Time axis: x = 120 + 14 * seconds -->
+  <g>
+    <line class="tick" x1="120" y1="40" x2="120" y2="350"/><text class="tl" x="120" y="32" text-anchor="middle">0 s</text>
+    <line class="tick" x1="260" y1="40" x2="260" y2="350"/><text class="tl" x="260" y="32" text-anchor="middle">10 s</text>
+    <line class="tick" x1="400" y1="40" x2="400" y2="350"/><text class="tl" x="400" y="32" text-anchor="middle">20 s</text>
+    <line class="tick" x1="540" y1="40" x2="540" y2="350"/><text class="tl" x="540" y="32" text-anchor="middle">30 s</text>
+    <line class="tick" x1="680" y1="40" x2="680" y2="350"/><text class="tl" x="680" y="32" text-anchor="middle">40 s</text>
+    <line class="tick" x1="820" y1="40" x2="820" y2="350"/><text class="tl" x="820" y="32" text-anchor="middle">50 s</text>
+    <line class="tick" x1="960" y1="40" x2="960" y2="350"/><text class="tl" x="960" y="32" text-anchor="middle">60 s</text>
+  </g>
+
+  <!-- Input -->
+  <text class="rowl" x="20" y="64">Input</text><text class="rows" x="20" y="78">from sidecar</text>
+  <rect class="input" x="120" y="52" width="112" height="22" rx="3"/>
+  <rect class="input" x="239" y="52" width="77" height="22" rx="3"/>
+  <rect class="input" x="428" y="52" width="126" height="22" rx="3"/>
+  <rect class="input" x="736" y="52" width="112" height="22" rx="3"/>
+  <rect class="input" x="862" y="52" width="42" height="22" rx="3"/>
+
+  <!-- Skip -->
+  <text class="rowl" x="20" y="110">Skip</text><text class="rows" x="20" y="124">always cut</text>
+  <rect class="skip" x="323" y="98" width="63" height="22" rx="3"/><text class="in" x="354" y="113" text-anchor="middle">loading</text>
+  <rect class="skip" x="904" y="98" width="56" height="22" rx="3"/><text class="in" x="932" y="113" text-anchor="middle">paused</text>
+
+  <!-- Keep -->
+  <text class="rowl" x="20" y="156">Keep</text><text class="rows" x="20" y="170">never cut</text>
+  <rect class="keep" x="568" y="144" width="42" height="22" rx="3"/>
+  <text class="why" x="589" y="184" text-anchor="middle">cutscene</text>
+
+  <!-- Markers -->
+  <text class="rowl" x="20" y="208">Markers</text><text class="rows" x="20" y="222">± 1.5 s kept</text>
+  <rect class="mwin" x="673" y="194" width="42" height="26" rx="3"/>
+  <line class="mk" x1="484" y1="190" x2="484" y2="224"/><text class="mkt" x="490" y="204">boss intro</text>
+  <line class="mk" x1="694" y1="190" x2="694" y2="224"/><text class="mkt" x="720" y="212">chest opens</text>
+
+  <!-- Idle -->
+  <text class="rowl" x="20" y="256">Idle</text><text class="rows" x="20" y="270">≥ 3 s solid</text>
+  <rect class="short" x="232" y="244" width="7" height="22" rx="2"/>
+  <rect class="idle" x="316" y="244" width="112" height="22" rx="3"/><text class="in" x="372" y="259" text-anchor="middle">8.0 s</text>
+  <rect class="short" x="554" y="244" width="14" height="22" rx="2"/>
+  <rect class="idle" x="610" y="244" width="63" height="22" rx="3"/><text class="in" x="641" y="259" text-anchor="middle">4.5 s</text>
+  <rect class="short" x="715" y="244" width="21" height="22" rx="2"/>
+  <rect class="short" x="848" y="244" width="14" height="22" rx="2"/>
+
+  <!-- Result -->
+  <text class="rowl" x="20" y="306">Result</text><text class="rows" x="20" y="320">idle padded 0.5 s</text>
+  <rect class="kept" x="120" y="292" width="203" height="30" rx="3"/>
+  <rect class="cut" x="323" y="292" width="98" height="30" rx="3"/>
+  <rect class="kept" x="421" y="292" width="196" height="30" rx="3"/>
+  <rect class="cut" x="617" y="292" width="49" height="30" rx="3"/>
+  <rect class="kept" x="666" y="292" width="238" height="30" rx="3"/>
+  <rect class="cut" x="904" y="292" width="56" height="30" rx="3"/>
+  <line class="lead" x1="372" y1="322" x2="372" y2="352"/><text class="why" x="372" y="366" text-anchor="middle">loading + idle 7.0 s</text>
+  <line class="lead" x1="641" y1="322" x2="641" y2="352"/><text class="why" x="641" y="366" text-anchor="middle">idle 3.5 s</text>
+  <line class="lead" x1="932" y1="322" x2="932" y2="352"/><text class="why" x="932" y="366" text-anchor="middle">paused 4.0 s</text>
+
+  <!-- Legend -->
+  <rect class="kept" x="120" y="390" width="16" height="12" rx="2"/><text class="why" x="142" y="400">kept</text>
+  <rect class="cut" x="190" y="390" width="16" height="12" rx="2"/><text class="why" x="212" y="400">cut (origin gameplay)</text>
+  <rect class="short" x="360" y="390" width="16" height="12" rx="2"/><text class="why" x="382" y="400">idle shorter than Min idle: left alone</text>
+  <rect class="mwin" x="620" y="390" width="16" height="12" rx="2"/><text class="why" x="642" y="400">marker window splits an idle span</text>
+</svg>

@@ -9,4 +9,17 @@
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
+  <!-- MIT, unlike the app (see LICENSE here and CLAUDE.md › Licensing), so Mainframe Engine's editor can use it. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Cutback.Core</PackageId>
+    <Description>Cutback's editing core: the segment partition, undo history, silence/filler/gameplay cut planning and .cutback project files.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/brogan89/Cutback</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
 </Project>

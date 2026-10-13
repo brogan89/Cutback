@@ -10,4 +10,17 @@
     <ProjectReference Include="..\Cutback.Core\Cutback.Core.csproj" />
   </ItemGroup>
 
+  <!-- MIT, unlike the app (see LICENSE here and CLAUDE.md › Licensing), so Mainframe Engine's editor can use it. -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Cutback.Media</PackageId>
+    <Description>Cutback's ffmpeg layer: probing, waveforms, silencedetect, filter graphs and export, all through the ffmpeg command line.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/brogan89/Cutback</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
 </Project>
