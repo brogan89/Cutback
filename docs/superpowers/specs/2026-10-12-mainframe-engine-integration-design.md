@@ -453,10 +453,10 @@ README: one paragraph and a screenshot.
 - **Run menu and toolbar.**
   - Run menu: **Play and Record** (`play.record`). As built, the shortcut is **F10**: Shift+F5 is already
     Run Another Instance and F9 is the UI debugger. The label follows the state (Play and Record, Start
-    Recording, Stop Recording, and a disabled Saving Recording…).
+    Recording, Stop Recording, and a disabled Saving recording…).
   - Toolbar: a `#record` button in `toolbar.rml`'s play group. As built, its icon is the icon atlas's
-    existing `point-filled`, tinted red (white on a red fill while recording), so no atlas regeneration was
-    needed.
+    existing `point-filled`, tinted red, so no atlas regeneration was needed. While recording (not while
+    saving) it is highlighted: dark red fill, red border, white icon.
   - When the game is not running, the button plays the main scene with
     `--record {user data}/{game}/recordings/{scene}-{yyyyMMdd-HHmmss}.mp4` added to `PlayRequest`'s
     extra args. While the game is running, it toggles recording over the link. It is red while
@@ -465,6 +465,12 @@ README: one paragraph and a screenshot.
     `-3` added when a name is taken.
   - **As built, every editor play launch passes `--frame-capture`** (before `--editor-port`), so recording can
     start mid-session: the swapchain needs `TRANSFER_SRC`, and the cost is that one usage flag.
+  - **As built, Play and Record names the file after the main scene**, and **Run Another Instance (Shift+F5)
+    never records**: it repeats the last launch without its `--record <path>`.
+  - **As built, stopping a game that is recording waits for the save.** The editor normally kills a stopped
+    game after 3 s, and the kill takes ffmpeg's mux with it. A game that is recording or saving gets 2 min
+    15 s instead (its own two-minute finalise cap plus a margin) and shows "Saving recording…" meanwhile;
+    quitting the editor waits for it the same way.
 - **Editor link, protocol version 4.**
   - New commands `EditorCommandKind.StartRecording = 7` (Argument = path) and `StopRecording = 8`.
     `TryDecode`'s range check is widened and `GameSession.Apply` handles both.
@@ -474,9 +480,13 @@ README: one paragraph and a screenshot.
     never coalesced, unlike `SendTree`'s latest-wins snapshot, because a `Stopped` must not be lost.
   - **As built, the editor reports a recording `Failed` itself only when the game's link is gone** (a
     disconnect, or an exit with no link), never ahead of the game's own last report.
-  - **`Version` = 4.**
-- **Status.** `#play-status` shows `● REC 1:23` while recording and `Saving recording…` while the file is
-  finalised.
+  - **`Version` = 4.** As built, the editor refuses to record a game whose hello reports a protocol below 4,
+    with "This game was built with an older MainframeEngine that cannot record from the editor. Rebuild it
+    against this engine." A Start that reaches a game already recording is answered `Started` with the
+    running recording's path, and a `--record` start that fails is reported `Failed` before the game quits.
+- **Status.** `#play-status` shows `REC 1:23` with a red dot while recording and `Saving recording…` while
+  the file is finalised. As built, the dot is the `point-filled` icon (`#rec-dot`): the UI font has no ●
+  glyph.
 - **When a recording finishes**, a notification offers **Open in Cutback** and **Show in Folder**.
   Phase 4 adds **Open in Clips Tab**. A `Failed` state shows the error and the `.partial` path. As built,
   this is a **modal `MessageDialog`**, not a notification: the editor has no toast system. The saved dialog
@@ -491,7 +501,8 @@ README: one paragraph and a screenshot.
   It launches with the recording path as the only argument. If nothing is found, the message links
   Cutback's releases page and the preference. As built, the preference is Editor Settings › Cutback
   (`EditorSettings.CutbackPath`), Cutback starts as a separate process, and a second dialog, "Cutback is
-  not installed", offers **Download** (the releases page).
+  not installed", offers **Download** (the releases page). On macOS the preference may name the `.app`
+  bundle, and a bundle is started with `open -a <bundle> --args <file>`.
 - **Testing:**
   - protocol round-trip for the new command and message, plus the version check;
   - recording path naming;
@@ -499,7 +510,7 @@ README: one paragraph and a screenshot.
   - a QA script (`--qa-script`) that clicks Record, waits, stops, and asserts the notification. As built,
     `Tests/QA/record.qa` runs `command play.record`, waits, runs it again and captures the dialog; it is run
     by hand with a display and ffmpeg, not in CI, and there is no verb to wait for the save (a fixed wait
-    stands in).
+    stands in). A third flow stops the game (F8) while it records and captures the save.
 
 ---
 
