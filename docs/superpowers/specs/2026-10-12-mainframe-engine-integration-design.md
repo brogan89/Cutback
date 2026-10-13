@@ -451,22 +451,37 @@ README: one paragraph and a screenshot.
 ## Phase 3 — Editor hooks (engine)
 
 - **Run menu and toolbar.**
-  - Run menu: **Play and Record** (`play.record`, Shift+F5 if free; F9 is the UI debugger).
-  - Toolbar: a `#record` button in `toolbar.rml`'s play group.
+  - Run menu: **Play and Record** (`play.record`). As built, the shortcut is **F10**: Shift+F5 is already
+    Run Another Instance and F9 is the UI debugger. The label follows the state (Play and Record, Start
+    Recording, Stop Recording, and a disabled Saving Recording…).
+  - Toolbar: a `#record` button in `toolbar.rml`'s play group. As built, its icon is the icon atlas's
+    existing `point-filled`, tinted red (white on a red fill while recording), so no atlas regeneration was
+    needed.
   - When the game is not running, the button plays the main scene with
     `--record {user data}/{game}/recordings/{scene}-{yyyyMMdd-HHmmss}.mp4` added to `PlayRequest`'s
     extra args. While the game is running, it toggles recording over the link. It is red while
-    recording. Enabled state lives in `Panels.cs` beside the play buttons.
+    recording. Enabled state lives in `Panels.cs` beside the play buttons. As built, the folder is
+    `{project user data}/recordings/` (the project's user data directory already names the game), with `-2`,
+    `-3` added when a name is taken.
+  - **As built, every editor play launch passes `--frame-capture`** (before `--editor-port`), so recording can
+    start mid-session: the swapchain needs `TRANSFER_SRC`, and the cost is that one usage flag.
 - **Editor link, protocol version 4.**
   - New commands `EditorCommandKind.StartRecording = 7` (Argument = path) and `StopRecording = 8`.
     `TryDecode`'s range check is widened and `GameSession.Apply` handles both.
   - New game→editor message `Recording = 8`, carrying state (`Started | Stopped | Failed`), path,
-    elapsed seconds, dropped frames and error text. It is queued like `SendTree` and drained in
-    `PlayService.DrainLink`.
+    elapsed seconds, dropped and duplicated frames and error text. It is drained in
+    `PlayService.DrainLink`. As built, recording events are **queued** in `EditorLinkClient` (up to 64) and
+    never coalesced, unlike `SendTree`'s latest-wins snapshot, because a `Stopped` must not be lost.
+  - **As built, the editor reports a recording `Failed` itself only when the game's link is gone** (a
+    disconnect, or an exit with no link), never ahead of the game's own last report.
   - **`Version` = 4.**
-- **Status.** `#play-status` shows `● REC 01:23` while recording.
+- **Status.** `#play-status` shows `● REC 1:23` while recording and `Saving recording…` while the file is
+  finalised.
 - **When a recording finishes**, a notification offers **Open in Cutback** and **Show in Folder**.
-  Phase 4 adds **Open in Clips Tab**. A `Failed` state shows the error and the `.partial` path.
+  Phase 4 adds **Open in Clips Tab**. A `Failed` state shows the error and the `.partial` path. As built,
+  this is a **modal `MessageDialog`**, not a notification: the editor has no toast system. The saved dialog
+  is titled "Recording saved" (file name, length, folder; buttons Open in Cutback, Show in Folder, Close),
+  the failed one "Recording failed". Phase 4's **Open in Clips Tab** is added to that dialog.
 - **`CutbackLocator`** (editor) resolves in this order:
   1. the editor preference `cutback.path`;
   2. `PATH` (`cutback`, `Cutback`);
@@ -474,12 +489,17 @@ README: one paragraph and a screenshot.
      `~/.local/bin/cutback`.
 
   It launches with the recording path as the only argument. If nothing is found, the message links
-  Cutback's releases page and the preference.
+  Cutback's releases page and the preference. As built, the preference is Editor Settings › Cutback
+  (`EditorSettings.CutbackPath`), Cutback starts as a separate process, and a second dialog, "Cutback is
+  not installed", offers **Download** (the releases page).
 - **Testing:**
   - protocol round-trip for the new command and message, plus the version check;
   - recording path naming;
   - `CutbackLocator` order over a fake file system;
-  - a QA script (`--qa-script`) that clicks Record, waits, stops, and asserts the notification.
+  - a QA script (`--qa-script`) that clicks Record, waits, stops, and asserts the notification. As built,
+    `Tests/QA/record.qa` runs `command play.record`, waits, runs it again and captures the dialog; it is run
+    by hand with a display and ffmpeg, not in CI, and there is no verb to wait for the save (a fixed wait
+    stands in).
 
 ---
 
@@ -520,7 +540,7 @@ Session wiring follows `SongTab`:
 - `is ClipTab` branches in `EditorSession` and `EditorCommands.Run`, so Undo/Redo/Save reach the
   tab's `EditHistory` and project.
 - File → Open accepts `.cutback` files and videos.
-- The Phase 3 notification gains **Open in Clips Tab**.
+- The Phase 3 dialog gains **Open in Clips Tab**.
 
 ### 4.3 Preview
 
@@ -607,4 +627,5 @@ games while recordings are H.264.
    Packages?
 3. **Recording in shipped games.** `--record` works in any build. Should a project setting be able to
    disable it in release builds?
-4. **Shortcut.** Is Shift+F5 free for Play and Record? (F9 is taken by the UI debugger.)
+4. ~~**Shortcut.** Is Shift+F5 free for Play and Record? (F9 is taken by the UI debugger.)~~ Resolved in
+   Phase 3: Shift+F5 is Run Another Instance, so Play and Record is **F10**.
